@@ -1,5 +1,5 @@
 use crate::macos::icon::extract_app_icon;
-use crate::macos::screen::CGRect;
+use crate::macos::screen::{get_active_screens, CGRect};
 use core_foundation::array::CFArray;
 use core_foundation::base::{CFType, TCFType};
 use core_foundation::boolean::CFBoolean;
@@ -39,11 +39,14 @@ pub struct WindowInfo {
     pub layer: i32,
     pub is_on_screen: bool,
     pub z_order: usize,
+    pub is_stage_manager: bool,
+    pub screen_id: u32,
 }
 
 pub fn list_windows() -> Vec<WindowInfo> {
     let mut windows = Vec::new();
     let current_pid = std::process::id() as i32;
+    let screens = get_active_screens();
 
     unsafe {
         let list_ptr = CGWindowListCopyWindowInfo(
@@ -65,6 +68,7 @@ pub fn list_windows() -> Vec<WindowInfo> {
         let k_bounds = CFString::new("kCGWindowBounds");
         let k_layer = CFString::new("kCGWindowLayer");
         let k_onscreen = CFString::new("kCGWindowIsOnscreen");
+        let k_alpha = CFString::new("kCGWindowAlpha");
 
         for i in 0..count {
             let item_ref = cf_array.get(i).unwrap();
@@ -80,6 +84,18 @@ pub fn list_windows() -> Vec<WindowInfo> {
                 None => 0,
             };
             if layer != 0 {
+                continue;
+            }
+
+            // 过滤完全透明或近似透明的隐藏/幽灵窗口
+            let alpha: f64 = match dict.find(&k_alpha) {
+                Some(val) => {
+                    let num = CFNumber::wrap_under_get_rule(val.as_CFTypeRef() as _);
+                    num.to_f64().unwrap_or(1.0)
+                }
+                None => 1.0,
+            };
+            if alpha < 0.05 {
                 continue;
             }
 
@@ -116,7 +132,12 @@ pub fn list_windows() -> Vec<WindowInfo> {
             };
 
             // 过滤系统空应用或特定服务
-            if app_name.is_empty() || app_name == "Window Server" || app_name == "Dock" {
+            if app_name.is_empty()
+                || app_name == "Window Server"
+                || app_name == "Dock"
+                || app_name == "控制中心"
+                || app_name == "通知中心"
+            {
                 continue;
             }
 
@@ -152,7 +173,7 @@ pub fn list_windows() -> Vec<WindowInfo> {
             }
 
             // 过滤尺寸过小的幽灵窗口/状态栏窗口
-            if rect.size.width < 50.0 || rect.size.height < 50.0 {
+            if rect.size.width < 40.0 || rect.size.height < 40.0 {
                 continue;
             }
 
@@ -165,7 +186,33 @@ pub fn list_windows() -> Vec<WindowInfo> {
                 None => true,
             };
 
-            // 8. 提取图标（利用 PID 提取，以 app_name 为缓存 Key）
+            // 8. 判定该窗口归属哪一个屏幕，以及是否为台前调度侧栏项
+            let center_x = rect.origin.x + rect.size.width / 2.0;
+            let center_y = rect.origin.y + rect.size.height / 2.0;
+
+            let target_screen = screens.iter().find(|s| {
+                center_x >= s.x && center_x < s.x + s.width && center_y >= s.y && center_y < s.y + s.height
+            }).or_else(|| {
+                screens.iter().find(|s| {
+                    rect.origin.x < s.x + s.width && rect.origin.x + rect.size.width > s.x
+                        && rect.origin.y < s.y + s.height && rect.origin.y + rect.size.height > s.y
+                })
+            });
+
+            let screen_id = target_screen.map(|s| s.id).unwrap_or(0);
+
+            // 台前调度侧栏应用特征：
+            // 当 macOS 开启 Stage Manager 时，未激活的应用会缩放到屏幕左侧/右侧窄条（宽度通常 < 380，贴边）
+            let is_stage_manager = if let Some(s) = target_screen {
+                let is_near_left = rect.origin.x <= s.x + 120.0;
+                let is_near_right = rect.origin.x + rect.size.width >= s.x + s.width - 120.0;
+                let is_narrow_shelf = rect.size.width < 380.0 && rect.size.height < 600.0;
+                (is_near_left || is_near_right) && is_narrow_shelf
+            } else {
+                false
+            };
+
+            // 9. 提取图标（利用 PID 提取，以 app_name 为缓存 Key）
             let app_icon = extract_app_icon(pid, &app_name);
 
             windows.push(WindowInfo {
@@ -181,6 +228,8 @@ pub fn list_windows() -> Vec<WindowInfo> {
                 layer,
                 is_on_screen,
                 z_order: windows.len(),
+                is_stage_manager,
+                screen_id,
             });
         }
     }

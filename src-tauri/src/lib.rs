@@ -5,7 +5,7 @@ pub mod tray;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-fn toggle_overlay(app: &AppHandle) {
+pub fn toggle_overlay(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         if let Ok(is_visible) = win.is_visible() {
             if is_visible {
@@ -55,6 +55,7 @@ pub fn run() {
             commands::show_overlay,
             commands::get_accessibility_status,
             commands::request_accessibility_settings,
+            commands::update_global_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("运行 WindowMap 应用程序出错");

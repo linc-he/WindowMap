@@ -4,6 +4,7 @@ use crate::macos::screen::{get_active_screens, get_mouse_screen, ScreenInfo};
 use crate::macos::window::{list_windows as macos_list_windows, WindowInfo};
 use crate::macos::window_ext::position_overlay;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[tauri::command]
 pub fn get_screens() -> Result<Vec<ScreenInfo>, String> {
@@ -72,4 +73,32 @@ pub fn get_accessibility_status() -> Result<bool, String> {
 #[tauri::command]
 pub fn request_accessibility_settings() -> Result<(), String> {
     open_accessibility_settings()
+}
+
+#[tauri::command]
+pub fn update_global_shortcut(
+    app: AppHandle,
+    old_shortcut: Option<String>,
+    new_shortcut: String,
+) -> Result<(), String> {
+    if let Some(old) = old_shortcut {
+        if let Ok(sc) = old.parse::<Shortcut>() {
+            let _ = app.global_shortcut().unregister(sc);
+        }
+    }
+
+    let sc = new_shortcut
+        .parse::<Shortcut>()
+        .map_err(|e| format!("快捷键格式无效: {}", e))?;
+
+    let app_handle = app.clone();
+    app.global_shortcut()
+        .on_shortcut(sc, move |_app, _sc, event| {
+            if event.state() == ShortcutState::Pressed {
+                crate::toggle_overlay(&app_handle);
+            }
+        })
+        .map_err(|e| format!("注册快捷键失败，可能被占用: {}", e))?;
+
+    Ok(())
 }

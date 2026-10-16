@@ -21,6 +21,8 @@ export interface WindowInfo {
   layer: number;
   isOnScreen: boolean;
   zOrder: number;
+  isStageManager: boolean;
+  screenId: number;
 }
 
 export type AnchorPosition =
@@ -36,4 +38,5 @@ export interface AppSettings {
   previewRatio: number;
   scope: "current-screen" | "all-screens";
   showWindowTitles: boolean;
+  includeStageManager: boolean;
 }

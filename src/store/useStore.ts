@@ -5,6 +5,8 @@ import { AppSettings, ScreenInfo, WindowInfo } from "../types";
 interface State {
   screens: ScreenInfo[];
   currentScreen: ScreenInfo | null;
+  selectedScreenId: number | null;
+  allWindows: WindowInfo[];
   windows: WindowInfo[];
   selectedIndex: number;
   isAccessibilityGranted: boolean;
@@ -13,12 +15,15 @@ interface State {
   settings: AppSettings;
 
   fetchState: () => Promise<void>;
+  setSelectedScreenId: (id: number) => void;
+  getActiveScreen: () => ScreenInfo | null;
   activateSelected: () => Promise<void>;
   activateWindow: (win: WindowInfo) => Promise<void>;
   hideOverlay: () => Promise<void>;
   setSelectedIndex: (idx: number) => void;
   setShowSettings: (show: boolean) => void;
   updateSettings: (newSettings: Partial<AppSettings>) => void;
+  updateGlobalShortcut: (newShortcut: string) => Promise<void>;
   checkPermission: () => Promise<void>;
   openPermissionSettings: () => Promise<void>;
 
@@ -35,6 +40,7 @@ const defaultSettings: AppSettings = {
   previewRatio: 0.28,
   scope: "current-screen",
   showWindowTitles: false,
+  includeStageManager: false,
 };
 
 function loadSavedSettings(): AppSettings {
@@ -52,12 +58,56 @@ function loadSavedSettings(): AppSettings {
 export const useStore = create<State>((set, get) => ({
   screens: [],
   currentScreen: null,
+  selectedScreenId: null,
+  allWindows: [],
   windows: [],
   selectedIndex: 0,
   isAccessibilityGranted: true,
   showSettings: false,
   isLoading: false,
   settings: loadSavedSettings(),
+
+  getActiveScreen: () => {
+    const { screens, currentScreen, selectedScreenId } = get();
+    if (selectedScreenId !== null) {
+      const found = screens.find((s) => s.id === selectedScreenId);
+      if (found) return found;
+    }
+    return currentScreen || screens[0] || null;
+  },
+
+  setSelectedScreenId: (id: number) => {
+    set({ selectedScreenId: id });
+    const { allWindows, settings } = get();
+    const activeScreen = get().screens.find((s) => s.id === id);
+
+    let filtered = allWindows;
+    if (activeScreen) {
+      filtered = allWindows.filter((w) => {
+        // 如果开启了台前调度过滤，排除台前调度侧栏项
+        if (!settings.includeStageManager && w.isStageManager) {
+          return false;
+        }
+        if (w.screenId > 0) {
+          return w.screenId === activeScreen.id;
+        }
+        // 坐标兜底
+        const cx = w.x + w.width / 2;
+        const cy = w.y + w.height / 2;
+        return (
+          cx >= activeScreen.x &&
+          cx < activeScreen.x + activeScreen.width &&
+          cy >= activeScreen.y &&
+          cy < activeScreen.y + activeScreen.height
+        );
+      });
+    }
+
+    set({
+      windows: filtered,
+      selectedIndex: filtered.length > 0 ? 0 : -1,
+    });
+  },
 
   fetchState: async () => {
     try {
@@ -70,20 +120,29 @@ export const useStore = create<State>((set, get) => ({
           invoke<boolean>("get_accessibility_status"),
         ]);
 
-      // 根据 scope 过滤窗口
-      const settings = get().settings;
-      let filteredWindows = allWindows;
+      const state = get();
+      // 保持用户主动选中的屏幕或默认当前鼠标屏幕
+      const activeScreen =
+        state.selectedScreenId !== null
+          ? screens.find((s) => s.id === state.selectedScreenId) || currentScreen
+          : currentScreen || screens[0];
 
-      if (settings.scope === "current-screen" && currentScreen) {
+      let filteredWindows = allWindows;
+      if (activeScreen) {
         filteredWindows = allWindows.filter((w) => {
-          // 判断窗口中心点是否落在当前屏幕范围内
+          if (!state.settings.includeStageManager && w.isStageManager) {
+            return false;
+          }
+          if (w.screenId > 0) {
+            return w.screenId === activeScreen.id;
+          }
           const cx = w.x + w.width / 2;
           const cy = w.y + w.height / 2;
           return (
-            cx >= currentScreen.x &&
-            cx < currentScreen.x + currentScreen.width &&
-            cy >= currentScreen.y &&
-            cy < currentScreen.y + currentScreen.height
+            cx >= activeScreen.x &&
+            cx < activeScreen.x + activeScreen.width &&
+            cy >= activeScreen.y &&
+            cy < activeScreen.y + activeScreen.height
           );
         });
       }
@@ -91,6 +150,8 @@ export const useStore = create<State>((set, get) => ({
       set({
         screens,
         currentScreen,
+        selectedScreenId: activeScreen ? activeScreen.id : null,
+        allWindows,
         windows: filteredWindows,
         isAccessibilityGranted,
         selectedIndex: filteredWindows.length > 0 ? 0 : -1,
@@ -143,6 +204,43 @@ export const useStore = create<State>((set, get) => ({
     const updated = { ...get().settings, ...newSettings };
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
     set({ settings: updated });
+
+    // 重新应用过滤（例如切换了 includeStageManager）
+    const activeScreen = get().getActiveScreen();
+    const { allWindows } = get();
+    if (activeScreen) {
+      const filtered = allWindows.filter((w) => {
+        if (!updated.includeStageManager && w.isStageManager) {
+          return false;
+        }
+        if (w.screenId > 0) {
+          return w.screenId === activeScreen.id;
+        }
+        const cx = w.x + w.width / 2;
+        const cy = w.y + w.height / 2;
+        return (
+          cx >= activeScreen.x &&
+          cx < activeScreen.x + activeScreen.width &&
+          cy >= activeScreen.y &&
+          cy < activeScreen.y + activeScreen.height
+        );
+      });
+      set({ windows: filtered });
+    }
+  },
+
+  updateGlobalShortcut: async (newShortcut: string) => {
+    const oldShortcut = get().settings.shortcut;
+    try {
+      await invoke("update_global_shortcut", {
+        oldShortcut,
+        newShortcut,
+      });
+      get().updateSettings({ shortcut: newShortcut });
+    } catch (e) {
+      console.error("更新全局快捷键失败:", e);
+      throw e;
+    }
   },
 
   checkPermission: async () => {
@@ -199,20 +297,20 @@ export const useStore = create<State>((set, get) => ({
 
       switch (direction) {
         case "right":
-          isValidDirection = dx > 20;
-          directionalDistance = dx + Math.abs(dy) * 1.8;
+          isValidDirection = dx > 15;
+          directionalDistance = dx + Math.abs(dy) * 1.6;
           break;
         case "left":
-          isValidDirection = dx < -20;
-          directionalDistance = -dx + Math.abs(dy) * 1.8;
+          isValidDirection = dx < -15;
+          directionalDistance = -dx + Math.abs(dy) * 1.6;
           break;
         case "down":
-          isValidDirection = dy > 20;
-          directionalDistance = dy + Math.abs(dx) * 1.8;
+          isValidDirection = dy > 15;
+          directionalDistance = dy + Math.abs(dx) * 1.6;
           break;
         case "up":
-          isValidDirection = dy < -20;
-          directionalDistance = -dy + Math.abs(dx) * 1.8;
+          isValidDirection = dy < -15;
+          directionalDistance = -dy + Math.abs(dx) * 1.6;
           break;
       }
 
