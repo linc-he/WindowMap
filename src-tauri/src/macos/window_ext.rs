@@ -35,17 +35,18 @@ pub fn position_overlay(
     anchor: &str,
     ratio: f64,
 ) -> Result<(), String> {
-    let margin = 32.0;
-    let ratio = ratio.clamp(0.15, 0.60);
+    let margin = 24.0;
+    // 支持 25% ~ 85% 比例动态缩放
+    let ratio = ratio.clamp(0.25, 0.85);
 
-    let panel_w = (screen.width * ratio).max(400.0);
-    let panel_h = (screen.height * ratio).max(300.0);
+    let panel_w = (screen.width * ratio).max(640.0).min(screen.width - margin * 2.0);
+    let panel_h = (screen.height * ratio).max(460.0).min(screen.height - margin * 2.0 - 24.0);
 
     let (panel_x, panel_y) = match anchor {
-        "top-left" => (screen.x + margin, screen.y + margin + 24.0), // +24 给菜单栏预留空间
+        "top-left" => (screen.x + margin, screen.y + margin + 28.0), // +28 预留 macOS 菜单栏
         "top-right" => (
             screen.x + screen.width - panel_w - margin,
-            screen.y + margin + 24.0,
+            screen.y + margin + 28.0,
         ),
         "bottom-left" => (
             screen.x + margin,

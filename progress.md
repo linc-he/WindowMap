@@ -1,13 +1,24 @@
-# 开发日志与会话记录 (progress.md)
+# WindowMap 进度更新 (progress.md)
 
-## 会话进度
-- 校验本地环境工具链与 Git 远程写权限通过。
-- 完成阶段 1：项目脚手架与基础环境搭建（Tauri 2 + React + TypeScript + Tailwind CSS 4 + Lucide Icons + Zustand）。
-- 完成阶段 2：Rust 原生窗口枚举、图标提取缓存与等比坐标映射。
-- 完成阶段 3：Accessibility 窗口激活置顶与键盘方向键空间切换闭环。
-- 完成阶段 4：设置面板、系统托盘（Tray）、GitHub Actions CI 自动化构建配置。
-- 完成阶段 5：本机生产模式编译与安装：
-  - 成功生成 Release 产物 `WindowMap.app` (4.44 MiB) 与安装包 `WindowMap_0.1.0_aarch64.dmg` (2.09 MiB)。
-  - 成功安装至系统 `/Applications/WindowMap.app` 并完成隔离属性清除。
-  - 应用已成功在后台启动运行（菜单栏托盘常驻）。
-- 代码已同步至 GitHub 仓库：`https://github.com/linc-he/WindowMap`。
+## 当前进度状态
+- **阶段一基础与初版安装**：已完成
+- **阶段二功能深化与体验优化**：
+  1. [x] **默认尺寸与动态调节**：
+     - Rust 端完善 `apply_panel_settings` 命令与 `position_overlay` 逻辑，最小基准尺寸提升至 640x460，支持 25%~85% 动态比例；
+     - 前端滑动滑块时实时联动更新 Native NSWindow 尺寸，无需重启或重新唤起；
+  2. [x] **独立台前调度（Stage Manager）侧栏与 Popover**：
+     - 主画布与台前调度完全解耦，主工作区窗口不再被边缘挤压；
+     - 独立的 `StageManagerShelf` 侧栏，展示图标与截断应用名；
+     - 鼠标悬浮自动弹出 Popover 详细信息卡片（应用名、窗口标题、PID、物理像素尺寸）；
+     - 点击任意台前调度项直接唤醒置顶并切换；
+  3. [x] **重叠窗口阶梯错落与高亮**：
+     - 重合度高的窗口群组采用 20px 阶梯错落位移（Cascading Offset），保证顶栏色带与左侧完全露出；
+     - 悬停自动提升 `zIndex` 并高亮缩放微抬，配合 App 专属特征色彩与徽章；
+  4. [x] **深浅双色主题（Dark / Light Mode）**：
+     - 顶栏提供快捷一键切换太阳/月亮图标；
+     - 偏好设置支持“深色 / 浅色 / 跟随系统”；
+     - 全局背景、边框、点阵、卡片阴影与文字对比度自适应浅色高对比与深色毛玻璃；
+  5. [x] **点击激活后可选保留浮层**：
+     - 设置项提供 `closeOnActivate` 开关，支持连贯切换多个应用而不隐藏地图；
+  6. [-] **生产编译与覆盖安装**：
+     - `pnpm tauri build` 正在打包中；完成打包后将覆盖安装至 `/Applications/WindowMap.app`，重启应用并提交 Git commit。

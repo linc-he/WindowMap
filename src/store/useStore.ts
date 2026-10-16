@@ -2,12 +2,25 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { AppSettings, ScreenInfo, WindowInfo } from "../types";
 
+export function applyTheme(theme: "dark" | "light" | "system") {
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  if (isDark) {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+}
+
 interface State {
   screens: ScreenInfo[];
   currentScreen: ScreenInfo | null;
   selectedScreenId: number | null;
   allWindows: WindowInfo[];
-  windows: WindowInfo[];
+  windows: WindowInfo[]; // 主工作区活跃窗口
+  stageWindows: WindowInfo[]; // 台前调度收纳窗口
   selectedIndex: number;
   isAccessibilityGranted: boolean;
   showSettings: boolean;
@@ -36,23 +49,55 @@ const SETTINGS_STORAGE_KEY = "windowmap_settings";
 
 const defaultSettings: AppSettings = {
   shortcut: "Alt+Space",
-  anchor: "top-left",
-  previewRatio: 0.28,
+  anchor: "center",
+  previewRatio: 0.55,
   scope: "current-screen",
-  showWindowTitles: false,
-  includeStageManager: false,
+  showWindowTitles: true,
+  includeStageManager: true,
+  theme: "dark",
+  closeOnActivate: true,
 };
 
 function loadSavedSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (raw) {
-      return { ...defaultSettings, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      const merged = { ...defaultSettings, ...parsed };
+      applyTheme(merged.theme);
+      return merged;
     }
   } catch (e) {
     console.error("加载设置失败，使用默认配置", e);
   }
+  applyTheme(defaultSettings.theme);
   return defaultSettings;
+}
+
+function filterWindowsForScreen(
+  all: WindowInfo[],
+  screen: ScreenInfo | null
+): { main: WindowInfo[]; stage: WindowInfo[] } {
+  if (!screen) return { main: [], stage: [] };
+
+  const onScreen = all.filter((w) => {
+    if (w.screenId > 0) {
+      return w.screenId === screen.id;
+    }
+    const cx = w.x + w.width / 2;
+    const cy = w.y + w.height / 2;
+    return (
+      cx >= screen.x &&
+      cx < screen.x + screen.width &&
+      cy >= screen.y &&
+      cy < screen.y + screen.height
+    );
+  });
+
+  const stage = onScreen.filter((w) => w.isStageManager);
+  const main = onScreen.filter((w) => !w.isStageManager);
+
+  return { main, stage };
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -61,6 +106,7 @@ export const useStore = create<State>((set, get) => ({
   selectedScreenId: null,
   allWindows: [],
   windows: [],
+  stageWindows: [],
   selectedIndex: 0,
   isAccessibilityGranted: true,
   showSettings: false,
@@ -78,34 +124,14 @@ export const useStore = create<State>((set, get) => ({
 
   setSelectedScreenId: (id: number) => {
     set({ selectedScreenId: id });
-    const { allWindows, settings } = get();
-    const activeScreen = get().screens.find((s) => s.id === id);
-
-    let filtered = allWindows;
-    if (activeScreen) {
-      filtered = allWindows.filter((w) => {
-        // 如果开启了台前调度过滤，排除台前调度侧栏项
-        if (!settings.includeStageManager && w.isStageManager) {
-          return false;
-        }
-        if (w.screenId > 0) {
-          return w.screenId === activeScreen.id;
-        }
-        // 坐标兜底
-        const cx = w.x + w.width / 2;
-        const cy = w.y + w.height / 2;
-        return (
-          cx >= activeScreen.x &&
-          cx < activeScreen.x + activeScreen.width &&
-          cy >= activeScreen.y &&
-          cy < activeScreen.y + activeScreen.height
-        );
-      });
-    }
+    const { allWindows, screens } = get();
+    const activeScreen = screens.find((s) => s.id === id) || null;
+    const { main, stage } = filterWindowsForScreen(allWindows, activeScreen);
 
     set({
-      windows: filtered,
-      selectedIndex: filtered.length > 0 ? 0 : -1,
+      windows: main,
+      stageWindows: stage,
+      selectedIndex: main.length > 0 ? 0 : -1,
     });
   },
 
@@ -121,40 +147,22 @@ export const useStore = create<State>((set, get) => ({
         ]);
 
       const state = get();
-      // 保持用户主动选中的屏幕或默认当前鼠标屏幕
       const activeScreen =
         state.selectedScreenId !== null
           ? screens.find((s) => s.id === state.selectedScreenId) || currentScreen
           : currentScreen || screens[0];
 
-      let filteredWindows = allWindows;
-      if (activeScreen) {
-        filteredWindows = allWindows.filter((w) => {
-          if (!state.settings.includeStageManager && w.isStageManager) {
-            return false;
-          }
-          if (w.screenId > 0) {
-            return w.screenId === activeScreen.id;
-          }
-          const cx = w.x + w.width / 2;
-          const cy = w.y + w.height / 2;
-          return (
-            cx >= activeScreen.x &&
-            cx < activeScreen.x + activeScreen.width &&
-            cy >= activeScreen.y &&
-            cy < activeScreen.y + activeScreen.height
-          );
-        });
-      }
+      const { main, stage } = filterWindowsForScreen(allWindows, activeScreen);
 
       set({
         screens,
         currentScreen,
         selectedScreenId: activeScreen ? activeScreen.id : null,
         allWindows,
-        windows: filteredWindows,
+        windows: main,
+        stageWindows: stage,
         isAccessibilityGranted,
-        selectedIndex: filteredWindows.length > 0 ? 0 : -1,
+        selectedIndex: main.length > 0 ? 0 : -1,
         isLoading: false,
       });
     } catch (e) {
@@ -172,12 +180,14 @@ export const useStore = create<State>((set, get) => ({
 
   activateWindow: async (win: WindowInfo) => {
     try {
+      const { settings } = get();
       await invoke("activate_window", {
         pid: win.pid,
         x: win.x,
         y: win.y,
         width: win.width,
         height: win.height,
+        closeOverlay: settings.closeOnActivate,
       });
     } catch (e) {
       console.error("激活窗口失败:", e);
@@ -201,31 +211,27 @@ export const useStore = create<State>((set, get) => ({
   },
 
   updateSettings: (newSettings: Partial<AppSettings>) => {
-    const updated = { ...get().settings, ...newSettings };
+    const prev = get().settings;
+    const updated = { ...prev, ...newSettings };
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updated));
     set({ settings: updated });
 
-    // 重新应用过滤（例如切换了 includeStageManager）
-    const activeScreen = get().getActiveScreen();
-    const { allWindows } = get();
-    if (activeScreen) {
-      const filtered = allWindows.filter((w) => {
-        if (!updated.includeStageManager && w.isStageManager) {
-          return false;
-        }
-        if (w.screenId > 0) {
-          return w.screenId === activeScreen.id;
-        }
-        const cx = w.x + w.width / 2;
-        const cy = w.y + w.height / 2;
-        return (
-          cx >= activeScreen.x &&
-          cx < activeScreen.x + activeScreen.width &&
-          cy >= activeScreen.y &&
-          cy < activeScreen.y + activeScreen.height
-        );
+    // 主题切换立即生效
+    if (newSettings.theme && newSettings.theme !== prev.theme) {
+      applyTheme(newSettings.theme);
+    }
+
+    // 锚点或尺寸变化时，立即通知 Rust 动态调整 Overlay 窗口
+    if (
+      newSettings.previewRatio !== undefined ||
+      newSettings.anchor !== undefined
+    ) {
+      invoke("apply_panel_settings", {
+        anchor: updated.anchor,
+        ratio: updated.previewRatio,
+      }).catch((err) => {
+        console.error("动态调整面板尺寸位置失败:", err);
       });
-      set({ windows: filtered });
     }
   },
 

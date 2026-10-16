@@ -29,10 +29,13 @@ pub fn activate_window(
     y: f64,
     width: f64,
     height: f64,
+    close_overlay: Option<bool>,
 ) -> Result<(), String> {
-    // 1. 隐藏地图面板
-    if let Some(win) = app.get_webview_window("main") {
-        let _ = win.hide();
+    // 1. 若配置为激活后关闭，则隐藏地图面板；若为 false 则保持驻留
+    if close_overlay.unwrap_or(true) {
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.hide();
+        }
     }
 
     // 2. 激活目标窗口
@@ -55,12 +58,26 @@ pub fn show_overlay(
 ) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("main") {
         if let Some(screen) = get_mouse_screen() {
-            let anchor_val = anchor.unwrap_or_else(|| "top-left".to_string());
-            let ratio_val = ratio.unwrap_or(0.25);
+            let anchor_val = anchor.unwrap_or_else(|| "center".to_string());
+            let ratio_val = ratio.unwrap_or(0.55);
             let _ = position_overlay(&win, &screen, &anchor_val, ratio_val);
         }
         let _ = win.show();
         let _ = win.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn apply_panel_settings(
+    app: AppHandle,
+    anchor: String,
+    ratio: f64,
+) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("main") {
+        if let Some(screen) = get_mouse_screen() {
+            let _ = position_overlay(&win, &screen, &anchor, ratio);
+        }
     }
     Ok(())
 }

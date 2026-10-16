@@ -39,4 +39,7 @@ export interface AppSettings {
   scope: "current-screen" | "all-screens";
   showWindowTitles: boolean;
   includeStageManager: boolean;
+  theme: "dark" | "light" | "system";
+  closeOnActivate: boolean;
 }
+

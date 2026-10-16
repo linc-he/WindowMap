@@ -56,6 +56,7 @@ pub fn run() {
             commands::get_accessibility_status,
             commands::request_accessibility_settings,
             commands::update_global_shortcut,
+            commands::apply_panel_settings,
         ])
         .run(tauri::generate_context!())
         .expect("运行 WindowMap 应用程序出错");

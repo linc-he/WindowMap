@@ -1,7 +1,18 @@
 import React, { useEffect, useCallback, useMemo } from "react";
-import { Settings, RefreshCw, X, Monitor, Layers, Eye, EyeOff } from "lucide-react";
+import {
+  Settings,
+  RefreshCw,
+  X,
+  Monitor,
+  Layers,
+  Eye,
+  EyeOff,
+  Sun,
+  Moon,
+} from "lucide-react";
 import { useStore } from "../store/useStore";
 import { WindowCard } from "./WindowCard";
+import { StageManagerShelf } from "./StageManagerShelf";
 import { PermissionGuide } from "./PermissionGuide";
 import { SettingsModal } from "./SettingsModal";
 
@@ -9,7 +20,7 @@ export const WindowMapOverlay: React.FC = () => {
   const {
     screens,
     windows,
-    allWindows,
+    stageWindows,
     selectedIndex,
     settings,
     isLoading,
@@ -28,6 +39,11 @@ export const WindowMapOverlay: React.FC = () => {
   } = useStore();
 
   const activeScreen = getActiveScreen();
+
+  const isDarkMode =
+    settings.theme === "dark" ||
+    (settings.theme === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   // 挂载与呼出时获取最新窗口数据
   useEffect(() => {
@@ -98,7 +114,7 @@ export const WindowMapOverlay: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  // 计算窗口重叠群组与错落位移层级
+  // 计算普通工作区窗口的重叠群组与错落位移层级
   const windowStackData = useMemo(() => {
     const stackInfo = new Map<
       number,
@@ -111,7 +127,8 @@ export const WindowMapOverlay: React.FC = () => {
       for (const cluster of clusters) {
         const leader = windows[cluster[0]];
         const dist = Math.hypot(win.x - leader.x, win.y - leader.y);
-        if (dist < 90) {
+        // 如果两窗口中心距离小于 120px，归为同一重叠簇
+        if (dist < 120) {
           cluster.push(idx);
           added = true;
           break;
@@ -134,24 +151,13 @@ export const WindowMapOverlay: React.FC = () => {
     return stackInfo;
   }, [windows]);
 
-  // 统计当前屏幕上台前调度应用数量
-  const stageManagerCount = useMemo(() => {
-    if (!activeScreen) return 0;
-    return allWindows.filter(
-      (w) =>
-        w.isStageManager &&
-        (w.screenId === activeScreen.id ||
-          (w.x >= activeScreen.x &&
-            w.x < activeScreen.x + activeScreen.width &&
-            w.y >= activeScreen.y &&
-            w.y < activeScreen.y + activeScreen.height))
-    ).length;
-  }, [allWindows, activeScreen]);
-
   // 当前屏幕长宽比
   const screenAspect = activeScreen
     ? activeScreen.width / activeScreen.height
     : 16 / 10;
+
+  const showStageShelf =
+    settings.includeStageManager && stageWindows.length > 0;
 
   return (
     <div
@@ -161,21 +167,37 @@ export const WindowMapOverlay: React.FC = () => {
       {/* 核心毛玻璃面板卡片 */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full h-full max-w-5xl bg-neutral-900/90 backdrop-blur-3xl border border-white/20 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-white animate-in zoom-in-95 duration-150"
+        className={`w-full h-full backdrop-blur-3xl border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 transition-colors ${
+          isDarkMode
+            ? "bg-neutral-900/90 border-white/20 text-white"
+            : "bg-neutral-100/95 border-neutral-300 text-neutral-900 shadow-2xl"
+        }`}
       >
         {/* 顶部标题与控制栏 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+        <div
+          className={`flex items-center justify-between px-4 py-3 border-b shrink-0 ${
+            isDarkMode
+              ? "border-white/10 bg-neutral-900/50"
+              : "border-neutral-200 bg-white/60"
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400 shadow-sm">
+            <div className="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400 shadow-xs">
               <Layers className="w-4 h-4" />
             </div>
-            <span className="font-bold text-sm tracking-wide text-white">
+            <span className="font-bold text-sm tracking-wide">
               WindowMap
             </span>
 
-            {/* 多显示器切换 Tab 选项卡（支持鼠标直接点击与键盘数字键 1/2/3 切换） */}
+            {/* 多显示器切换 Tab */}
             {screens.length > 1 && (
-              <div className="flex items-center gap-1.5 ml-2 bg-neutral-950/70 p-1 rounded-xl border border-white/10">
+              <div
+                className={`flex items-center gap-1.5 ml-2 p-1 rounded-xl border ${
+                  isDarkMode
+                    ? "bg-neutral-950/70 border-white/10"
+                    : "bg-neutral-200/70 border-neutral-300"
+                }`}
+              >
                 {screens.map((s, idx) => {
                   const isActive = activeScreen?.id === s.id;
                   return (
@@ -186,12 +208,19 @@ export const WindowMapOverlay: React.FC = () => {
                       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition cursor-pointer font-medium ${
                         isActive
                           ? "bg-sky-500 text-white font-bold shadow-md shadow-sky-500/30"
-                          : "text-neutral-400 hover:text-white hover:bg-white/10"
+                          : isDarkMode
+                          ? "text-neutral-400 hover:text-white hover:bg-white/10"
+                          : "text-neutral-600 hover:text-neutral-950 hover:bg-black/5"
                       }`}
                     >
                       <Monitor className="w-3.5 h-3.5" />
-                      <span>屏幕 {idx + 1}{s.isMain ? " (主)" : ""}</span>
-                      <kbd className="text-[10px] opacity-60 font-mono">[{idx + 1}]</kbd>
+                      <span>
+                        屏幕 {idx + 1}
+                        {s.isMain ? " (主)" : ""}
+                      </span>
+                      <kbd className="text-[10px] opacity-60 font-mono">
+                        [{idx + 1}]
+                      </kbd>
                     </button>
                   );
                 })}
@@ -200,8 +229,8 @@ export const WindowMapOverlay: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* 台前调度侧栏应用显示/隐藏快速切换 */}
-            {stageManagerCount > 0 && (
+            {/* 台前调度应用快速切换折叠开关 */}
+            {stageWindows.length > 0 && (
               <button
                 onClick={() =>
                   updateSettings({
@@ -210,13 +239,15 @@ export const WindowMapOverlay: React.FC = () => {
                 }
                 title={
                   settings.includeStageManager
-                    ? "隐藏台前调度侧栏应用"
-                    : "展开台前调度侧栏应用"
+                    ? "隐藏台前调度侧栏"
+                    : "展开台前调度侧栏"
                 }
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border transition cursor-pointer ${
                   settings.includeStageManager
-                    ? "bg-purple-500/20 border-purple-400/40 text-purple-300"
-                    : "bg-white/5 border-white/10 text-neutral-400 hover:text-neutral-200"
+                    ? "bg-purple-500/20 border-purple-400/40 text-purple-400 font-medium"
+                    : isDarkMode
+                    ? "bg-white/5 border-white/10 text-neutral-400 hover:text-neutral-200"
+                    : "bg-neutral-200 border-neutral-300 text-neutral-600 hover:text-neutral-900"
                 }`}
               >
                 {settings.includeStageManager ? (
@@ -224,30 +255,70 @@ export const WindowMapOverlay: React.FC = () => {
                 ) : (
                   <EyeOff className="w-3.5 h-3.5" />
                 )}
-                <span>台前调度 ({stageManagerCount})</span>
+                <span>台前调度 ({stageWindows.length})</span>
               </button>
             )}
 
+            {/* 深浅主题快速切换 */}
+            <button
+              onClick={() =>
+                updateSettings({
+                  theme: isDarkMode ? "light" : "dark",
+                })
+              }
+              title={`当前主题: ${isDarkMode ? "深色" : "浅色"}，点击切换`}
+              className={`p-1.5 rounded-lg border transition cursor-pointer ${
+                isDarkMode
+                  ? "bg-white/5 border-white/10 text-amber-300 hover:bg-white/10"
+                  : "bg-neutral-200 border-neutral-300 text-amber-600 hover:bg-neutral-300"
+              }`}
+            >
+              {isDarkMode ? (
+                <Sun className="w-4 h-4" />
+              ) : (
+                <Moon className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* 刷新 */}
             <button
               onClick={() => fetchState()}
               title="刷新窗口数据"
-              className="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition cursor-pointer"
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                isDarkMode
+                  ? "hover:bg-white/10 text-neutral-400 hover:text-white"
+                  : "hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950"
+              }`}
             >
               <RefreshCw
-                className={`w-4 h-4 ${isLoading ? "animate-spin text-sky-400" : ""}`}
+                className={`w-4 h-4 ${
+                  isLoading ? "animate-spin text-sky-400" : ""
+                }`}
               />
             </button>
+
+            {/* 设置 */}
             <button
               onClick={() => setShowSettings(true)}
               title="偏好设置"
-              className="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition cursor-pointer"
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                isDarkMode
+                  ? "hover:bg-white/10 text-neutral-400 hover:text-white"
+                  : "hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950"
+              }`}
             >
               <Settings className="w-4 h-4" />
             </button>
+
+            {/* 关闭 */}
             <button
               onClick={hideOverlay}
               title="关闭 (Esc)"
-              className="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition cursor-pointer ml-1"
+              className={`p-1.5 rounded-lg transition cursor-pointer ml-1 ${
+                isDarkMode
+                  ? "hover:bg-white/10 text-neutral-400 hover:text-white"
+                  : "hover:bg-neutral-200 text-neutral-600 hover:text-neutral-950"
+              }`}
             >
               <X className="w-4 h-4" />
             </button>
@@ -255,103 +326,166 @@ export const WindowMapOverlay: React.FC = () => {
         </div>
 
         {/* 权限提示横幅 */}
-        <div className="pt-3">
+        <div className="pt-2">
           <PermissionGuide />
         </div>
 
-        {/* 窗口地图画布区域 */}
-        <div className="flex-1 p-4 min-h-0 flex items-center justify-center overflow-hidden">
+        {/* 核心工作区：左侧主画布 + 右侧独立台前调度栏 */}
+        <div className="flex-1 p-3 min-h-0 flex items-stretch gap-3 overflow-hidden">
           {activeScreen ? (
-            <div
-              style={{
-                aspectRatio: `${screenAspect}`,
-              }}
-              className="w-full max-h-full relative rounded-xl border border-white/15 bg-neutral-950/80 shadow-inner overflow-hidden"
-            >
-              {/* 背景空间点阵参考线 */}
-              <div className="absolute inset-0 bg-[radial-gradient(#ffffff15_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
+            <div className="flex-1 min-w-0 flex items-center justify-center overflow-hidden">
+              <div
+                style={{
+                  aspectRatio: `${screenAspect}`,
+                }}
+                className={`w-full max-h-full relative rounded-xl border shadow-inner overflow-hidden ${
+                  isDarkMode
+                    ? "border-white/15 bg-neutral-950/85"
+                    : "border-neutral-300 bg-neutral-200/60"
+                }`}
+              >
+                {/* 背景空间点阵参考线 */}
+                <div
+                  className={`absolute inset-0 pointer-events-none ${
+                    isDarkMode
+                      ? "bg-[radial-gradient(#ffffff15_1px,transparent_1px)]"
+                      : "bg-[radial-gradient(#00000018_1px,transparent_1px)]"
+                  } [background-size:24px_24px]`}
+                />
 
-              {/* 渲染所有窗口 */}
-              {windows.length > 0 ? (
-                windows.map((win, idx) => {
-                  const stackData = windowStackData.get(idx) || {
-                    stackIndex: 0,
-                    totalInStack: 1,
-                  };
-                  return (
-                    <WindowCard
-                      key={`${win.windowId}-${win.pid}-${idx}`}
-                      window={win}
-                      screen={activeScreen}
-                      index={idx}
-                      stackIndex={stackData.stackIndex}
-                      totalInStack={stackData.totalInStack}
-                      isSelected={selectedIndex === idx}
-                      showTitles={settings.showWindowTitles}
-                      onSelect={() => setSelectedIndex(idx)}
-                      onActivate={() => activateWindow(win)}
-                    />
-                  );
-                })
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-400">
-                  <Monitor className="w-12 h-12 stroke-1 mb-2 text-neutral-600" />
-                  <p className="text-sm font-medium">该屏幕暂无普通活跃窗口</p>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    点击顶部切换其他显示器，或在右上角开启“台前调度”
-                  </p>
-                </div>
-              )}
+                {/* 渲染所有主工作区窗口 */}
+                {windows.length > 0 ? (
+                  windows.map((win, idx) => {
+                    const stackData = windowStackData.get(idx) || {
+                      stackIndex: 0,
+                      totalInStack: 1,
+                    };
+                    return (
+                      <WindowCard
+                        key={`${win.windowId}-${win.pid}-${idx}`}
+                        window={win}
+                        screen={activeScreen}
+                        index={idx}
+                        stackIndex={stackData.stackIndex}
+                        totalInStack={stackData.totalInStack}
+                        isSelected={selectedIndex === idx}
+                        isDarkMode={isDarkMode}
+                        showTitles={settings.showWindowTitles}
+                        onSelect={() => setSelectedIndex(idx)}
+                        onActivate={() => activateWindow(win)}
+                      />
+                    );
+                  })
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-400">
+                    <Monitor className="w-12 h-12 stroke-1 mb-2 text-neutral-500" />
+                    <p className="text-sm font-medium">
+                      当前屏幕暂无活跃普通窗口
+                    </p>
+                    <p className="text-xs text-neutral-500 mt-1">
+                      {stageWindows.length > 0
+                        ? "所有应用均已收入右侧“台前调度”中，点击右侧项直接切换"
+                        : "点击顶部切换其他显示器"}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center text-neutral-400">
+            <div className="flex-1 flex flex-col items-center justify-center text-neutral-400">
               <RefreshCw className="w-6 h-6 animate-spin text-sky-400 mb-2" />
               <p className="text-xs">正在探测显示器布局...</p>
             </div>
           )}
+
+          {/* 右侧独立台前调度侧栏 */}
+          {showStageShelf && (
+            <StageManagerShelf
+              windows={stageWindows}
+              isDarkMode={isDarkMode}
+              onActivate={activateWindow}
+            />
+          )}
         </div>
 
         {/* 底部快捷键操作指引与窗口计数 */}
-        <div className="px-4 py-2.5 border-t border-white/10 bg-neutral-950/60 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-          <div className="flex items-center gap-3">
-            <span>
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-neutral-200">
+        <div
+          className={`px-4 py-2 border-t flex items-center justify-between text-[11px] font-mono shrink-0 ${
+            isDarkMode
+              ? "border-white/10 bg-neutral-950/60 text-neutral-400"
+              : "border-neutral-200 bg-neutral-200/50 text-neutral-600"
+          }`}
+        >
+          <div className="flex items-center gap-3 overflow-x-auto py-0.5">
+            <span className="whitespace-nowrap">
+              <kbd
+                className={`px-1.5 py-0.5 rounded ${
+                  isDarkMode
+                    ? "bg-white/10 text-neutral-200"
+                    : "bg-neutral-300 text-neutral-800"
+                }`}
+              >
                 ↑↓←→
               </kbd>{" "}
               空间定位
             </span>
-            <span>
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-neutral-200">
+            <span className="whitespace-nowrap">
+              <kbd
+                className={`px-1.5 py-0.5 rounded ${
+                  isDarkMode
+                    ? "bg-white/10 text-neutral-200"
+                    : "bg-neutral-300 text-neutral-800"
+                }`}
+              >
                 Enter
               </kbd>{" "}
               激活置顶
             </span>
-            <span>
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-neutral-200">
+            <span className="whitespace-nowrap">
+              <kbd
+                className={`px-1.5 py-0.5 rounded ${
+                  isDarkMode
+                    ? "bg-white/10 text-neutral-200"
+                    : "bg-neutral-300 text-neutral-800"
+                }`}
+              >
                 Tab
               </kbd>{" "}
               循环切换
             </span>
             {screens.length > 1 && (
-              <span>
-                <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-neutral-200">
+              <span className="whitespace-nowrap">
+                <kbd
+                  className={`px-1.5 py-0.5 rounded ${
+                    isDarkMode
+                      ? "bg-white/10 text-neutral-200"
+                      : "bg-neutral-300 text-neutral-800"
+                  }`}
+                >
                   1-9
                 </kbd>{" "}
                 切换屏幕
               </span>
             )}
-            <span>
-              <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-neutral-200">
+            <span className="whitespace-nowrap">
+              <kbd
+                className={`px-1.5 py-0.5 rounded ${
+                  isDarkMode
+                    ? "bg-white/10 text-neutral-200"
+                    : "bg-neutral-300 text-neutral-800"
+                }`}
+              >
                 Esc
               </kbd>{" "}
               退出
             </span>
           </div>
 
-          <div className="text-neutral-400">
-            {windows.length} 个窗口
+          <div className="whitespace-nowrap ml-2">
+            主区: {windows.length} 个
+            {stageWindows.length > 0 ? ` · 台前: ${stageWindows.length} 个` : ""}
             {selectedIndex >= 0 && windows[selectedIndex]
-              ? ` · 当前选中: ${windows[selectedIndex].appName}`
+              ? ` · 当前: ${windows[selectedIndex].appName}`
               : ""}
           </div>
         </div>
