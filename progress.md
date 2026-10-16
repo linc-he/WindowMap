@@ -1,21 +1,21 @@
 # WindowMap 进度更新 (progress.md)
 
 ## 当前进度状态
-- **阶段一与阶段二**：已全面完成
-- **阶段三体验深化与重构**：
-  1. [x] **窗口顶部空白位置原生拖拽移动**：
-     - 在 `WindowMapOverlay.tsx` 顶部标题栏区域集成 `data-tauri-drag-region` 与 `getCurrentWebviewWindow().startDragging()`；
-     - 隔离按钮、显示器切换 Tab、深浅切换等交互元素，避免误触拖拽；
-  2. [x] **彻底清理系统后台无意义进程（WindowManager 等）**：
-     - 在 Rust 层的 `window.rs` 中将 `WindowManager`、`com.apple.WindowManager`、`WindowServer`、`SystemUIServer`、`Spotlight` 等加入系统黑名单；
-     - 在前端 `useStore.ts` 中加入双重安全过滤，彻底净化台前调度侧栏列表；
-  3. [x] **BounceCards 式空间错落避让与弹发展开引擎**：
-     - 面积小的窗口初始赋予更高 `baseZIndex`，杜绝大窗口盖死小窗口；
-     - 当鼠标悬停在重叠簇时，启用 BounceCards 式扇形弹力推开机制（`pushDistance` 扩散与微角度旋转），底层的多层窗口瞬间散开露出供点选；
-     - 配合弹簧曲线动效（`cubic-bezier(0.34, 1.4, 0.64, 1)`），手感灵动顺滑；
-  4. [x] **台前调度 AnimatedList 动效流升级**：
-     - 上下边缘增加羽化渐变遮罩（Fade Mask）；
-     - 增加滑动跟随胶囊选择指示器（Gliding Pill Indicator）；
-     - 保留悬浮 Popover 详细信息预览；
-  5. [-] **生产构建与覆盖安装**：
-     - `pnpm tauri build` 正在编译打包中，构建后将自动安装至 `/Applications/WindowMap.app` 并推送到 GitHub。
+- **核心开发方向成功重构落地**：
+  1. [x] **告别物理几何映射，全面转型同比例 BounceCards 规范卡片**：
+     - 所有窗口采用统一 244px × 152px 黄金比例卡片；
+     - 彻底根除“大窗口挡死小窗口”、“缩略图变形太扁”的顽疾；
+     - 每张卡片均呈现 28px 高清应用大图标、大号应用名、窗口具体标题标签、专属特征彩条与序号徽章；
+  2. [x] **纯正 BounceCards 弹性堆叠与交互**：
+     - 卡片带有自然微角度错落倾斜（`-3.2° ~ +3.0°`）；
+     - 鼠标 Hover 或键盘方向键聚焦时：该卡片弹跳升起、直立摆正、放大 `scale(1.08)` 并置顶；
+     - 同组/两侧其他卡片向外自动推开避让（`Push Distance` 52px），露出开阔视觉通道；
+     - 点击卡片直接激活置顶目标应用；
+  3. [x] **台前调度 AnimatedList 动效侧栏**：
+     - 彻底过滤 `WindowManager` 等无意义系统辅助进程；
+     - 具备流畅滑动的选中胶囊（Gliding Indicator Pill）与上下羽化遮罩；
+  4. [x] **顶部空白区原生拖拽移动**：
+     - 按住顶部标题栏空闲位置可任意在屏幕上平移面板；
+  5. [x] **最新版本已编译、安装并运行**：
+     - 已覆盖安装至 `/Applications/WindowMap.app` 并已在后台启动；
+     - 源代码已同步提交推送至 GitHub `main` 分支。

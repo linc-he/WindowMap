@@ -297,54 +297,35 @@ export const useStore = create<State>((set, get) => ({
 
   navigateDirection: (direction: "up" | "down" | "left" | "right") => {
     const { windows, selectedIndex } = get();
-    if (windows.length <= 1 || selectedIndex < 0) return;
+    if (windows.length <= 1) return;
 
-    const current = windows[selectedIndex];
-    const currentCx = current.x + current.width / 2;
-    const currentCy = current.y + current.height / 2;
+    const count = windows.length;
+    let nextIdx = selectedIndex < 0 ? 0 : selectedIndex;
+    const columns = count <= 6 ? count : 3;
 
-    let bestIdx = -1;
-    let minDistance = Infinity;
-
-    for (let i = 0; i < windows.length; i++) {
-      if (i === selectedIndex) continue;
-      const target = windows[i];
-      const targetCx = target.x + target.width / 2;
-      const targetCy = target.y + target.height / 2;
-
-      const dx = targetCx - currentCx;
-      const dy = targetCy - currentCy;
-
-      let isValidDirection = false;
-      let directionalDistance = 0;
-
-      switch (direction) {
-        case "right":
-          isValidDirection = dx > 15;
-          directionalDistance = dx + Math.abs(dy) * 1.6;
-          break;
-        case "left":
-          isValidDirection = dx < -15;
-          directionalDistance = -dx + Math.abs(dy) * 1.6;
-          break;
-        case "down":
-          isValidDirection = dy > 15;
-          directionalDistance = dy + Math.abs(dx) * 1.6;
-          break;
-        case "up":
-          isValidDirection = dy < -15;
-          directionalDistance = -dy + Math.abs(dx) * 1.6;
-          break;
-      }
-
-      if (isValidDirection && directionalDistance < minDistance) {
-        minDistance = directionalDistance;
-        bestIdx = i;
-      }
+    switch (direction) {
+      case "right":
+        nextIdx = (selectedIndex + 1) % count;
+        break;
+      case "left":
+        nextIdx = (selectedIndex - 1 + count) % count;
+        break;
+      case "down":
+        if (count <= 6) {
+          nextIdx = (selectedIndex + 1) % count;
+        } else {
+          nextIdx = Math.min(count - 1, selectedIndex + columns);
+        }
+        break;
+      case "up":
+        if (count <= 6) {
+          nextIdx = (selectedIndex - 1 + count) % count;
+        } else {
+          nextIdx = Math.max(0, selectedIndex - columns);
+        }
+        break;
     }
 
-    if (bestIdx !== -1) {
-      set({ selectedIndex: bestIdx });
-    }
+    set({ selectedIndex: nextIdx });
   },
 }));

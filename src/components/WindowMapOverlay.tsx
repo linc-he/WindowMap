@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useMemo, useState } from "react";
+import React, { useEffect, useCallback } from "react";
 import {
   Settings,
   RefreshCw,
@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useStore } from "../store/useStore";
-import { WindowCard } from "./WindowCard";
+import { WindowBounceDeck } from "./WindowBounceDeck";
 import { StageManagerShelf } from "./StageManagerShelf";
 import { PermissionGuide } from "./PermissionGuide";
 import { SettingsModal } from "./SettingsModal";
@@ -40,7 +40,6 @@ export const WindowMapOverlay: React.FC = () => {
     navigatePrev,
   } = useStore();
 
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const activeScreen = getActiveScreen();
 
   const isDarkMode =
@@ -127,115 +126,6 @@ export const WindowMapOverlay: React.FC = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
-
-  // BounceCards 空间错落避让与弹发展开引擎（Fan-out Spread Engine）
-  const { clusters, stackData, baseZIndexMap } = useMemo(() => {
-    const clusterList: number[][] = [];
-    const stackInfo = new Map<
-      number,
-      { stackIndex: number; totalInStack: number; clusterIdx: number }
-    >();
-    const zIndexMap = new Map<number, number>();
-
-    // 1. 面积反比排序：较小的窗口获得更高的基础层级（baseZIndex），防止大窗口默认遮盖小窗口
-    const sortedIndices = windows.map((_, i) => i);
-    sortedIndices.sort((a, b) => {
-      const areaA = windows[a].width * windows[a].height;
-      const areaB = windows[b].width * windows[b].height;
-      return areaB - areaA; // 面积大的排在前面（低 zIndex）
-    });
-    sortedIndices.forEach((winIdx, order) => {
-      zIndexMap.set(winIdx, 20 + order * 4);
-    });
-
-    // 2. 重叠簇划分（基于几何中心距与矩形交叠）
-    windows.forEach((win, idx) => {
-      let assignedCluster = -1;
-      for (let c = 0; c < clusterList.length; c++) {
-        const cluster = clusterList[c];
-        const leader = windows[cluster[0]];
-        const dist = Math.hypot(win.x - leader.x, win.y - leader.y);
-
-        // 几何相交或中心距离相近即视为同簇
-        const isOverlap =
-          Math.max(win.x, leader.x) <
-            Math.min(win.x + win.width, leader.x + leader.width) &&
-          Math.max(win.y, leader.y) <
-            Math.min(win.y + win.height, leader.y + leader.height);
-
-        if (dist < 130 || isOverlap) {
-          cluster.push(idx);
-          assignedCluster = c;
-          break;
-        }
-      }
-      if (assignedCluster === -1) {
-        clusterList.push([idx]);
-      }
-    });
-
-    clusterList.forEach((cluster, cIdx) => {
-      cluster.forEach((winIdx, orderInCluster) => {
-        stackInfo.set(winIdx, {
-          stackIndex: orderInCluster,
-          totalInStack: cluster.length,
-          clusterIdx: cIdx,
-        });
-      });
-    });
-
-    return {
-      clusters: clusterList,
-      stackData: stackInfo,
-      baseZIndexMap: zIndexMap,
-    };
-  }, [windows]);
-
-  // 计算每个窗口实时的 BounceCards 避让弹发偏移（Push Distance & Fan-out Rotation）
-  const getCardPhysics = useCallback(
-    (idx: number) => {
-      const info = stackData.get(idx);
-      if (!info || info.totalInStack <= 1) {
-        return { pushX: 0, pushY: 0, rotation: 0 };
-      }
-
-      const activeIdx = hoveredIdx !== null ? hoveredIdx : selectedIndex;
-      const activeInfo = activeIdx >= 0 ? stackData.get(activeIdx) : null;
-
-      // 仅当当前悬停/选中的窗口与本窗口在同一重叠簇时，触发扇形展开
-      if (activeInfo && activeInfo.clusterIdx === info.clusterIdx) {
-        const order = info.stackIndex;
-        const total = info.totalInStack;
-
-        if (idx === activeIdx) {
-          return { pushX: 0, pushY: -8, rotation: 0 };
-        }
-
-        // 扇形弹开展开：邻近卡片向外扩散（类似扑克牌展开），露出底层所有大/小窗口
-        const mid = (total - 1) / 2;
-        const offsetFromMid = order - mid;
-        const pushDistance = Math.min(75, 24 + total * 10);
-
-        const angleRad = (offsetFromMid / Math.max(1, total)) * 1.1;
-        const pushX = Math.sin(angleRad) * pushDistance * 1.5;
-        const pushY = Math.abs(offsetFromMid) * 12 + 4;
-        const rotation = offsetFromMid * 3.5; // 轻微旋转产生自然质感
-
-        return { pushX, pushY, rotation };
-      }
-
-      // 未被激活时：保持自然的阶梯微旋转
-      const order = info.stackIndex;
-      const subtleRotate = ((order % 3) - 1) * 1.5;
-      return { pushX: 0, pushY: 0, rotation: subtleRotate };
-    },
-    [stackData, clusters, hoveredIdx, selectedIndex]
-  );
-
-  // 当前屏幕长宽比
-  const screenAspect = activeScreen
-    ? activeScreen.width / activeScreen.height
-    : 16 / 10;
 
   const showStageShelf =
     settings.includeStageManager && stageWindows.length > 0;
@@ -428,78 +318,42 @@ export const WindowMapOverlay: React.FC = () => {
           <PermissionGuide />
         </div>
 
-        {/* 核心工作区：左侧 BounceCards 避让主画布 + 右侧 AnimatedList 风格台前调度栏 */}
+        {/* 核心工作区：左侧 BounceCards 同比例弹性卡片流 + 右侧 AnimatedList 风格台前调度栏 */}
         <div className="flex-1 p-3 min-h-0 flex items-stretch gap-3 overflow-hidden">
           {activeScreen ? (
-            <div className="flex-1 min-w-0 flex items-center justify-center overflow-hidden">
+            <div className="flex-1 min-w-0 flex items-center justify-center overflow-hidden relative rounded-xl border shadow-inner">
+              {/* 背景空间点阵参考线 */}
               <div
-                style={{
-                  aspectRatio: `${screenAspect}`,
-                }}
-                className={`w-full max-h-full relative rounded-xl border shadow-inner overflow-hidden ${
+                className={`absolute inset-0 pointer-events-none ${
                   isDarkMode
-                    ? "border-white/15 bg-neutral-950/85"
-                    : "border-neutral-300 bg-neutral-200/60"
-                }`}
-              >
-                {/* 背景空间点阵参考线 */}
-                <div
-                  className={`absolute inset-0 pointer-events-none ${
-                    isDarkMode
-                      ? "bg-[radial-gradient(#ffffff15_1px,transparent_1px)]"
-                      : "bg-[radial-gradient(#00000018_1px,transparent_1px)]"
-                  } [background-size:24px_24px]`}
+                    ? "bg-[radial-gradient(#ffffff15_1px,transparent_1px)] bg-neutral-950/80"
+                    : "bg-[radial-gradient(#00000018_1px,transparent_1px)] bg-neutral-200/50"
+                } [background-size:24px_24px]`}
+              />
+
+              {/* 渲染 BounceCards 同比例规范化卡片组 */}
+              {windows.length > 0 ? (
+                <WindowBounceDeck
+                  windows={windows}
+                  selectedIndex={selectedIndex}
+                  isDarkMode={isDarkMode}
+                  showTitles={settings.showWindowTitles}
+                  onSelect={(idx) => setSelectedIndex(idx)}
+                  onActivate={(win) => activateWindow(win)}
                 />
-
-                {/* 渲染所有主工作区窗口（带 BounceCards 避让弹发展开与物理阴影） */}
-                {windows.length > 0 ? (
-                  windows.map((win, idx) => {
-                    const stack = stackData.get(idx) || {
-                      stackIndex: 0,
-                      totalInStack: 1,
-                      clusterIdx: 0,
-                    };
-                    const baseZ = baseZIndexMap.get(idx) || 20;
-                    const physics = getCardPhysics(idx);
-
-                    return (
-                      <WindowCard
-                        key={`${win.windowId}-${win.pid}-${idx}`}
-                        window={win}
-                        screen={activeScreen}
-                        index={idx}
-                        stackIndex={stack.stackIndex}
-                        totalInStack={stack.totalInStack}
-                        baseZIndex={baseZ}
-                        pushX={physics.pushX}
-                        pushY={physics.pushY}
-                        rotation={physics.rotation}
-                        isSelected={selectedIndex === idx}
-                        isDarkMode={isDarkMode}
-                        showTitles={settings.showWindowTitles}
-                        onSelect={() => setSelectedIndex(idx)}
-                        onActivate={() => activateWindow(win)}
-                        onHoverChange={(isH) => {
-                          if (isH) setHoveredIdx(idx);
-                          else if (hoveredIdx === idx) setHoveredIdx(null);
-                        }}
-                      />
-                    );
-                  })
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-400">
-                    <Monitor className="w-12 h-12 stroke-1 mb-2 text-neutral-500" />
-                    <p className="text-sm font-medium">
-                      当前屏幕暂无活跃普通窗口
-                    </p>
-                    <p className="text-xs text-neutral-500 mt-1">
-                      {stageWindows.length > 0
-                        ? "应用已收纳在右侧“台前调度”中，点击直接激活"
-                        : "点击顶部切换其他显示器"}
-                    </p>
-                  </div>
-                )}
-              </div>
+              ) : (
+                <div className="relative z-10 flex flex-col items-center justify-center text-neutral-400 p-6">
+                  <Monitor className="w-12 h-12 stroke-1 mb-2 text-neutral-500" />
+                  <p className="text-sm font-medium">
+                    当前屏幕暂无活跃普通应用
+                  </p>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    {stageWindows.length > 0
+                      ? "应用已收纳在右侧“台前调度”中，点击直接激活"
+                      : "点击顶部切换其他显示器"}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-neutral-400">
@@ -537,7 +391,7 @@ export const WindowMapOverlay: React.FC = () => {
               >
                 ↑↓←→
               </kbd>{" "}
-              空间定位
+              卡片切换
             </span>
             <span className="whitespace-nowrap">
               <kbd
@@ -561,7 +415,7 @@ export const WindowMapOverlay: React.FC = () => {
               >
                 Tab
               </kbd>{" "}
-              循环切换
+              循环焦点
             </span>
             {screens.length > 1 && (
               <span className="whitespace-nowrap">
@@ -592,7 +446,7 @@ export const WindowMapOverlay: React.FC = () => {
           </div>
 
           <div className="whitespace-nowrap ml-2">
-            主区: {windows.length} 个
+            当前应用: {windows.length} 个
             {stageWindows.length > 0 ? ` · 台前: ${stageWindows.length} 个` : ""}
             {selectedIndex >= 0 && windows[selectedIndex]
               ? ` · 当前: ${windows[selectedIndex].appName}`
