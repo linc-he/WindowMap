@@ -1,52 +1,44 @@
-# WindowMap 阶段二功能优化任务计划 (task_plan.md)
+# WindowMap 任务计划与进度跟踪 (task_plan.md)
 
 ## 项目目标
-根据用户实测反馈，深度打磨 WindowMap 的交互视觉体验与多任务管理能力：
-1. **尺寸自适应与实时调节**：增大默认预览比例至 55%，支持 25%~85% 范围调节并在拖动时实时联动调整原生窗口大小；
-2. **独立台前调度（Stage Manager）侧栏**：将屏幕边缘堆叠的台前调度应用剥离为主画布 + 右侧独立收纳侧栏，显示应用名称，支持悬浮 Popover 查看完整信息及一键激活；
-3. **主工作区重叠窗口阶梯错落算法**：针对全屏/同位置多窗口，提供阶梯位移（Cascading Offset）、顶部色带与 Hover 展开（Fan-out），保证各窗口露头可见可点；
-4. **深浅双色主题（Dark / Light Mode）**：完美支持深色、浅色及跟随系统主题，顶部一键切换，全局毛玻璃与窗口对比度自适应；
-5. **激活后可选保留浮层（closeOnActivate）**：支持偏好设置切换，激活应用后可选择自动隐藏或保持地图置顶供连续操作；
-6. **编译与更新安装**：构建生产 Release 并覆盖安装到 `/Applications/WindowMap.app`，同步推送到 GitHub。
+根据用户提出的深度交互建议，全面提升 WindowMap 的操作手感、视觉质感与多窗口管理可用性：
+1. **窗口顶部空白区拖拽移动**：支持鼠标按住 WindowMap 面板顶部空白区域原生拖拽移动面板，同时保证内部按钮与 Tab 点击不冲突；
+2. **彻底清理无意义的系统后台进程**：在 Rust 原生层与前端双重过滤 `WindowManager`、`WindowServer` 等系统辅助窗口，只保留真实活跃 App；
+3. **基于 BounceCards 机制的主画布错落与避让展开**：
+   - 彻底解决“大窗口覆盖小窗口导致底层无法切换”的问题；
+   - 引入类似 React Bits BounceCards 的弹性扇形/避让发散机制：当多窗口重叠时，鼠标悬浮自动向四周弹开发散（Fan-out Spread），将所有隐藏在后方的窗口摊开展现；
+   - 支持键盘方向键与鼠标点击精确激活；
+4. **台前调度侧栏重构为 AnimatedList 动效流**：
+   - 参考 React Bits AnimatedList 设计，引入弹性光标跟随时滑块（Gliding Indicator）、上下渐变边缘遮罩（Fade Mask）与流畅进场弹动；
+   - 保持 Hover Popover 查看完整信息，增强键盘上下键交互体验；
+5. **编译、覆盖安装与 GitHub 提交**：测试通过后编译生产包并更新安装至 `/Applications/WindowMap.app`，推送到远程仓库。
 
 ---
 
-## 优化任务清单
+## 阶段三详细任务清单
 
-- [ ] **任务 1：Rust IPC 接口与动态窗口定位完善** `in-progress`
-  - [x] 在 `src-tauri/src/commands.rs` 中实现 `apply_panel_settings` 与 `close_overlay` 参数
-  - [x] 在 `src-tauri/src/lib.rs` 的 `invoke_handler!` 中注册 `apply_panel_settings`
-  - [ ] 确保最小窗口尺寸为 760x520，避免在高分屏或大比例下变形
+- [x] **任务 1：窗口顶部空白区原生拖拽支持** `complete`
+  - [x] 在 `src/components/WindowMapOverlay.tsx` 顶部标题栏空白区域配置 Tauri 拖拽区域（`data-tauri-drag-region` 与 `startDragging`）
+  - [x] 确保按钮、显示器切换 Tab、深浅切换等交互元素具备 `onMouseDown={(e) => e.stopPropagation()}`，防止误触拖拽
 
-- [ ] **任务 2：前端类型、Store 状态与实时联动** `pending`
-  - [x] 更新 `src/types/index.ts`，增加 `theme` 与 `closeOnActivate` 字段
-  - [ ] 更新 `src/store/useStore.ts`：
-    - 增加深浅色主题切换及 html/class 同步
-    - 增加 `closeOnActivate` 配置并传递给 `activate_window`
-    - 在更新 `previewRatio` 或 `anchor` 时实时调用 `apply_panel_settings`
-    - 分离当前屏幕的 `mainWindows` 与 `stageWindows`
+- [x] **任务 2：彻底过滤系统无意义进程（WindowManager 等）** `complete`
+  - [x] 在 `src-tauri/src/macos/window.rs` 的系统过滤列表中加入 `WindowManager`、`com.apple.WindowManager` 等
+  - [x] 在前端 `src/store/useStore.ts` 的 `filterWindowsForScreen` 增加净化逻辑，过滤无效无界面的后台助手进程
 
-- [ ] **任务 3：视觉样式与错落层叠算法 (WindowCard & Colors)** `pending`
-  - [ ] 优化 `src/utils/colors.ts`：为深色和浅色模式分别定义高辨识度色彩、边框与徽章
-  - [ ] 优化 `src/components/WindowCard.tsx`：
-    - 支持深色/浅色模式自适应样式
-    - 优化重叠窗口阶梯偏移（`staggerX = stackIndex * 22`, `staggerY = stackIndex * 22`）
-    - Hover 时 `zIndex` 提升至顶层、轻微缩放并增加发光阴影
-    - 顶部高亮彩条与序号徽章清晰展现
+- [x] **任务 3：基于 BounceCards 机制的主画布错落避让与弹发展开** `complete`
+  - [x] 实现重叠区域碰撞检测与扇形发散展开（Fan-out / Spread Engine）：当区域存在多个大小不一的重叠窗口时，Hover 自动向外推开其他窗口（`pushDistance`）
+  - [x] 确保小窗口永远不被大窗口完全淹没，小窗口自动获得优先露出或展开偏移
+  - [x] 实现平滑弹簧动效（Spring physics），悬浮聚焦窗口直立抬升，周围卡片自然退让
 
-- [ ] **任务 4：主界面重构与台前调度独立侧栏 (WindowMapOverlay)** `pending`
-  - [ ] 在 `src/components/WindowMapOverlay.tsx` 中将布局拆解为：左侧主工作区画布 + 右侧独立台前调度抽屉侧栏
-  - [ ] 台前调度列表项显示图标、截断应用名，鼠标悬浮显示丰富 Popover（完整应用名、窗口标题、尺寸、PID）
-  - [ ] 顶部栏增加深浅色主题切换按钮（太阳/月亮图标）与多屏幕快捷切换
-  - [ ] 底部快捷键指南添加 `whitespace-nowrap`，彻底杜绝换行断字
+- [x] **任务 4：台前调度重构为 AnimatedList 风格** `complete`
+  - [x] 重构 `src/components/StageManagerShelf.tsx`，加入 AnimatedList 经典视觉元素：
+    - 上下边缘羽化遮罩（Gradient Fade Mask）
+    - 平滑滑动的选中/Hover 背景游标（Gliding Selection Pill）
+    - 优化条目排版与弹性 Hover 微动效
+  - [x] 保持详细 Popover 浮层预览
 
-- [ ] **任务 5：设置弹窗 (SettingsModal) 全面升级** `pending`
-  - [ ] 增加深浅色模式（深色 / 浅色 / 跟随系统）选择控件
-  - [ ] 增加“点击激活应用后关闭 WindowMap”开关选项
-  - [ ] 尺寸滑块范围调整为 25%~85%，拖拽滑块时通过 `apply_panel_settings` 实时改变浮层大小
-
-- [ ] **任务 6：生产编译构建、覆盖安装与 GitHub 推送** `pending`
-  - [ ] `pnpm build` 与 `cargo check` 验证通过
-  - [ ] `pnpm tauri build` 构建 macOS release 包
-  - [ ] 关闭旧进程，覆盖安装到 `/Applications/WindowMap.app` 并清理隔离属性
-  - [ ] 启动新版应用并提交所有代码至 GitHub `main` 分支
+- [x] **任务 5：编译验证、覆盖安装与 GitHub 推送** `complete`
+  - [x] `pnpm build` 与 `cargo check` 验证
+  - [x] `pnpm tauri build` 生产构建
+  - [x] 覆盖安装到 `/Applications/WindowMap.app` 并重启验证
+  - [x] 提交 Commit 并推送到 GitHub `main` 分支

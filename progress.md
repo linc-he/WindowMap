@@ -1,24 +1,21 @@
 # WindowMap 进度更新 (progress.md)
 
 ## 当前进度状态
-- **阶段一基础与初版安装**：已完成
-- **阶段二功能深化与体验优化**：
-  1. [x] **默认尺寸与动态调节**：
-     - Rust 端完善 `apply_panel_settings` 命令与 `position_overlay` 逻辑，最小基准尺寸提升至 640x460，支持 25%~85% 动态比例；
-     - 前端滑动滑块时实时联动更新 Native NSWindow 尺寸，无需重启或重新唤起；
-  2. [x] **独立台前调度（Stage Manager）侧栏与 Popover**：
-     - 主画布与台前调度完全解耦，主工作区窗口不再被边缘挤压；
-     - 独立的 `StageManagerShelf` 侧栏，展示图标与截断应用名；
-     - 鼠标悬浮自动弹出 Popover 详细信息卡片（应用名、窗口标题、PID、物理像素尺寸）；
-     - 点击任意台前调度项直接唤醒置顶并切换；
-  3. [x] **重叠窗口阶梯错落与高亮**：
-     - 重合度高的窗口群组采用 20px 阶梯错落位移（Cascading Offset），保证顶栏色带与左侧完全露出；
-     - 悬停自动提升 `zIndex` 并高亮缩放微抬，配合 App 专属特征色彩与徽章；
-  4. [x] **深浅双色主题（Dark / Light Mode）**：
-     - 顶栏提供快捷一键切换太阳/月亮图标；
-     - 偏好设置支持“深色 / 浅色 / 跟随系统”；
-     - 全局背景、边框、点阵、卡片阴影与文字对比度自适应浅色高对比与深色毛玻璃；
-  5. [x] **点击激活后可选保留浮层**：
-     - 设置项提供 `closeOnActivate` 开关，支持连贯切换多个应用而不隐藏地图；
-  6. [-] **生产编译与覆盖安装**：
-     - `pnpm tauri build` 正在打包中；完成打包后将覆盖安装至 `/Applications/WindowMap.app`，重启应用并提交 Git commit。
+- **阶段一与阶段二**：已全面完成
+- **阶段三体验深化与重构**：
+  1. [x] **窗口顶部空白位置原生拖拽移动**：
+     - 在 `WindowMapOverlay.tsx` 顶部标题栏区域集成 `data-tauri-drag-region` 与 `getCurrentWebviewWindow().startDragging()`；
+     - 隔离按钮、显示器切换 Tab、深浅切换等交互元素，避免误触拖拽；
+  2. [x] **彻底清理系统后台无意义进程（WindowManager 等）**：
+     - 在 Rust 层的 `window.rs` 中将 `WindowManager`、`com.apple.WindowManager`、`WindowServer`、`SystemUIServer`、`Spotlight` 等加入系统黑名单；
+     - 在前端 `useStore.ts` 中加入双重安全过滤，彻底净化台前调度侧栏列表；
+  3. [x] **BounceCards 式空间错落避让与弹发展开引擎**：
+     - 面积小的窗口初始赋予更高 `baseZIndex`，杜绝大窗口盖死小窗口；
+     - 当鼠标悬停在重叠簇时，启用 BounceCards 式扇形弹力推开机制（`pushDistance` 扩散与微角度旋转），底层的多层窗口瞬间散开露出供点选；
+     - 配合弹簧曲线动效（`cubic-bezier(0.34, 1.4, 0.64, 1)`），手感灵动顺滑；
+  4. [x] **台前调度 AnimatedList 动效流升级**：
+     - 上下边缘增加羽化渐变遮罩（Fade Mask）；
+     - 增加滑动跟随胶囊选择指示器（Gliding Pill Indicator）；
+     - 保留悬浮 Popover 详细信息预览；
+  5. [-] **生产构建与覆盖安装**：
+     - `pnpm tauri build` 正在编译打包中，构建后将自动安装至 `/Applications/WindowMap.app` 并推送到 GitHub。

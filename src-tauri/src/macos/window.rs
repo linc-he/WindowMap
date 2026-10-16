@@ -131,12 +131,19 @@ pub fn list_windows() -> Vec<WindowInfo> {
                 None => String::new(),
             };
 
-            // 过滤系统空应用或特定服务
+            // 过滤系统空应用或特定后台服务（包括 WindowManager、Window Server、Dock 等辅助图层）
             if app_name.is_empty()
+                || app_name == "WindowManager"
                 || app_name == "Window Server"
+                || app_name == "WindowServer"
                 || app_name == "Dock"
                 || app_name == "控制中心"
                 || app_name == "通知中心"
+                || app_name == "ControlCenter"
+                || app_name == "NotificationCenter"
+                || app_name == "SystemUIServer"
+                || app_name == "Spotlight"
+                || app_name == "loginwindow"
             {
                 continue;
             }

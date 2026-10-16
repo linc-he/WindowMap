@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { AppWindow, ExternalLink, Sparkles } from "lucide-react";
 import { WindowInfo } from "../types";
 
@@ -13,20 +13,49 @@ export const StageManagerShelf: React.FC<Props> = ({
   isDarkMode,
   onActivate,
 }) => {
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [hoveredWin, setHoveredWin] = useState<WindowInfo | null>(null);
   const [popoverPos, setPopoverPos] = useState<{ top: number; right: number }>({
     top: 0,
     right: 0,
   });
 
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [indicatorStyle, setIndicatorStyle] = useState<{
+    top: number;
+    height: number;
+    opacity: number;
+  }>({
+    top: 0,
+    height: 0,
+    opacity: 0,
+  });
+
+  // 动态同步 AnimatedList 滑动胶囊指示器 (Gliding Selection Pill)
+  useEffect(() => {
+    if (selectedIndex >= 0 && itemRefs.current[selectedIndex]) {
+      const el = itemRefs.current[selectedIndex];
+      if (el) {
+        setIndicatorStyle({
+          top: el.offsetTop,
+          height: el.offsetHeight,
+          opacity: 1,
+        });
+      }
+    } else {
+      setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
+    }
+  }, [selectedIndex, windows]);
+
   if (windows.length === 0) return null;
 
   return (
     <div
-      className={`w-52 h-full flex flex-col shrink-0 border-l rounded-r-xl overflow-hidden transition-colors ${
+      className={`w-60 h-full flex flex-col shrink-0 border-l rounded-r-xl overflow-hidden transition-colors ${
         isDarkMode
           ? "bg-neutral-950/70 border-white/10 text-white"
-          : "bg-neutral-50/80 border-neutral-300 text-neutral-900"
+          : "bg-neutral-50/90 border-neutral-300 text-neutral-900"
       }`}
     >
       {/* 侧栏标头 */}
@@ -48,78 +77,122 @@ export const StageManagerShelf: React.FC<Props> = ({
               : "bg-purple-100 text-purple-700 border border-purple-300"
           }`}
         >
-          {windows.length}
+          {windows.length} 个应用
         </span>
       </div>
 
-      {/* 列表项内容 */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1.5 relative">
-        {windows.map((win, idx) => {
-          return (
-            <div
-              key={`${win.windowId}-${win.pid}-${idx}`}
-              onClick={() => onActivate(win)}
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setPopoverPos({
-                  top: Math.max(10, rect.top - 60),
-                  right: window.innerWidth - rect.left + 12,
-                });
-                setHoveredWin(win);
-              }}
-              onMouseLeave={() => setHoveredWin(null)}
-              className={`group flex items-center gap-2 p-2 rounded-xl border transition-all duration-150 cursor-pointer ${
-                isDarkMode
-                  ? "bg-neutral-900/60 hover:bg-neutral-800/90 border-white/5 hover:border-purple-400/50"
-                  : "bg-white hover:bg-neutral-100 border-neutral-200 hover:border-purple-400/60 shadow-xs"
-              }`}
-            >
-              {/* 应用图标 */}
-              {win.appIcon ? (
-                <img
-                  src={win.appIcon}
-                  alt={win.appName}
-                  className="w-6 h-6 rounded-md object-contain shrink-0 shadow-xs group-hover:scale-105 transition-transform"
-                />
-              ) : (
-                <div
-                  className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
-                    isDarkMode ? "bg-white/10" : "bg-neutral-200"
-                  }`}
-                >
-                  <AppWindow className="w-3.5 h-3.5 text-neutral-400" />
-                </div>
-              )}
+      {/* AnimatedList 动效列表容器（带上下边缘渐变虚化遮罩 Fade Mask） */}
+      <div
+        ref={listContainerRef}
+        style={{
+          maskImage:
+            "linear-gradient(to bottom, transparent 0%, black 14px, black calc(100% - 14px), transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to bottom, transparent 0%, black 14px, black calc(100% - 14px), transparent 100%)",
+        }}
+        className="flex-1 overflow-y-auto p-2 relative"
+      >
+        {/* 滑动的背景选择胶囊光标 (Gliding Pill Indicator) */}
+        <div
+          style={{
+            transform: `translate3d(0, ${indicatorStyle.top}px, 0)`,
+            height: `${indicatorStyle.height}px`,
+            opacity: indicatorStyle.opacity,
+            transition:
+              "transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.2s ease, opacity 0.15s ease",
+          }}
+          className={`absolute left-2 right-2 rounded-xl pointer-events-none z-0 border ${
+            isDarkMode
+              ? "bg-purple-500/15 border-purple-400/40 shadow-sm shadow-purple-500/20"
+              : "bg-purple-500/10 border-purple-400/50 shadow-xs"
+          }`}
+        />
 
-              {/* 应用名称 */}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold truncate leading-tight">
-                  {win.appName}
-                </p>
-                {win.title ? (
-                  <p
-                    className={`text-[10px] truncate ${
-                      isDarkMode ? "text-neutral-400" : "text-neutral-500"
-                    }`}
-                  >
-                    {win.title}
-                  </p>
+        {/* 列表项集合 */}
+        <div className="space-y-1.5 relative z-10">
+          {windows.map((win, idx) => {
+            const isSelected = selectedIndex === idx;
+            return (
+              <div
+                key={`${win.windowId}-${win.pid}-${idx}`}
+                ref={(el) => {
+                  itemRefs.current[idx] = el;
+                }}
+                onClick={() => {
+                  setSelectedIndex(idx);
+                  onActivate(win);
+                }}
+                onMouseEnter={(e) => {
+                  setSelectedIndex(idx);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setPopoverPos({
+                    top: Math.max(10, rect.top - 60),
+                    right: window.innerWidth - rect.left + 12,
+                  });
+                  setHoveredWin(win);
+                }}
+                onMouseLeave={() => setHoveredWin(null)}
+                className={`group flex items-center gap-2.5 p-2 rounded-xl border transition-all duration-150 cursor-pointer ${
+                  isSelected
+                    ? isDarkMode
+                      ? "border-transparent"
+                      : "border-transparent"
+                    : isDarkMode
+                    ? "bg-neutral-900/40 border-white/5 hover:border-white/10"
+                    : "bg-white/70 border-neutral-200/80 hover:border-neutral-300"
+                }`}
+              >
+                {/* 应用图标 */}
+                {win.appIcon ? (
+                  <img
+                    src={win.appIcon}
+                    alt={win.appName}
+                    className="w-6 h-6 rounded-md object-contain shrink-0 shadow-xs group-hover:scale-105 transition-transform"
+                  />
                 ) : (
-                  <p
-                    className={`text-[9px] font-mono ${
-                      isDarkMode ? "text-neutral-500" : "text-neutral-400"
+                  <div
+                    className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
+                      isDarkMode ? "bg-white/10" : "bg-neutral-200"
                     }`}
                   >
-                    {Math.round(win.width)}×{Math.round(win.height)}
-                  </p>
+                    <AppWindow className="w-3.5 h-3.5 text-neutral-400" />
+                  </div>
                 )}
-              </div>
 
-              {/* 激活指示图标 */}
-              <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-purple-400 transition-opacity shrink-0" />
-            </div>
-          );
-        })}
+                {/* 应用名称与标题 */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold truncate leading-tight">
+                    {win.appName}
+                  </p>
+                  {win.title ? (
+                    <p
+                      className={`text-[10px] truncate ${
+                        isDarkMode ? "text-neutral-400" : "text-neutral-500"
+                      }`}
+                    >
+                      {win.title}
+                    </p>
+                  ) : (
+                    <p
+                      className={`text-[9px] font-mono ${
+                        isDarkMode ? "text-neutral-500" : "text-neutral-400"
+                      }`}
+                    >
+                      {Math.round(win.width)}×{Math.round(win.height)}
+                    </p>
+                  )}
+                </div>
+
+                {/* 激活指示图标 */}
+                <ExternalLink
+                  className={`w-3 h-3 shrink-0 text-purple-400 transition-opacity ${
+                    isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  }`}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* 悬浮 Popover 详情卡片 */}
@@ -129,7 +202,7 @@ export const StageManagerShelf: React.FC<Props> = ({
             position: "fixed",
             top: `${popoverPos.top}px`,
             right: `${popoverPos.right}px`,
-            zIndex: 100,
+            zIndex: 150,
           }}
           className={`w-64 p-3 rounded-xl border shadow-2xl backdrop-blur-2xl pointer-events-none animate-in fade-in zoom-in-95 duration-100 ${
             isDarkMode

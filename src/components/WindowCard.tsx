@@ -9,11 +9,16 @@ interface Props {
   index: number;
   stackIndex: number;
   totalInStack: number;
+  baseZIndex: number;
+  pushX: number;
+  pushY: number;
+  rotation: number;
   isSelected: boolean;
   isDarkMode: boolean;
   showTitles: boolean;
   onSelect: () => void;
   onActivate: () => void;
+  onHoverChange?: (isHovered: boolean) => void;
 }
 
 export const WindowCard: React.FC<Props> = ({
@@ -22,11 +27,16 @@ export const WindowCard: React.FC<Props> = ({
   index,
   stackIndex,
   totalInStack,
+  baseZIndex,
+  pushX,
+  pushY,
+  rotation,
   isSelected,
   isDarkMode,
   showTitles,
   onSelect,
   onActivate,
+  onHoverChange,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const theme = getAppTheme(win.appName);
@@ -49,9 +59,14 @@ export const WindowCard: React.FC<Props> = ({
     Math.min(100 - topPercent, (win.height / screen.height) * 100)
   );
 
-  // 叠放错落阶梯位移：多窗口同位置时按 20px 阶梯向右下级联，确保每一层露出顶部与侧边
-  const staggerX = totalInStack > 1 ? stackIndex * 20 : 0;
-  const staggerY = totalInStack > 1 ? stackIndex * 20 : 0;
+  // 基础阶梯错落
+  const staggerX = totalInStack > 1 ? stackIndex * 16 : 0;
+  const staggerY = totalInStack > 1 ? stackIndex * 16 : 0;
+
+  // 最终位移与 BounceCards 旋转（选中有焦点或悬浮时直立摆正）
+  const finalX = staggerX + pushX;
+  const finalY = staggerY + pushY;
+  const finalRotate = isSelected || isHovered ? 0 : rotation;
 
   const bgClass = isDarkMode ? theme.bgDark : theme.bgLight;
   const borderClass = isDarkMode ? theme.borderDark : theme.borderLight;
@@ -69,32 +84,39 @@ export const WindowCard: React.FC<Props> = ({
       onMouseEnter={() => {
         setIsHovered(true);
         onSelect();
+        onHoverChange?.(true);
       }}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        onHoverChange?.(false);
+      }}
       style={{
         left: `${leftPercent}%`,
         top: `${topPercent}%`,
         width: `${widthPercent}%`,
         height: `${heightPercent}%`,
-        transform: `translate(${staggerX}px, ${staggerY}px)${
-          isSelected || isHovered ? " scale(1.02)" : ""
+        transform: `translate3d(${finalX}px, ${finalY}px, 0) rotate(${finalRotate}deg)${
+          isSelected || isHovered ? " scale(1.035)" : ""
         }`,
-        zIndex: isSelected ? 90 : isHovered ? 80 : 10 + stackIndex,
+        transformOrigin: "center center",
+        transition:
+          "transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s ease-out, border-color 0.2s ease-out",
+        zIndex: isSelected ? 120 : isHovered ? 110 : baseZIndex + stackIndex,
         boxShadow: isSelected
-          ? `0 0 24px -2px ${theme.accent}88, 0 12px 28px -4px rgba(0,0,0,${
-              isDarkMode ? 0.7 : 0.25
+          ? `0 0 28px -2px ${theme.accent}99, 0 14px 30px -4px rgba(0,0,0,${
+              isDarkMode ? 0.75 : 0.3
             })`
           : isHovered
-          ? `0 0 16px -2px ${theme.accent}55, 0 8px 20px -4px rgba(0,0,0,${
-              isDarkMode ? 0.6 : 0.2
+          ? `0 0 20px -2px ${theme.accent}66, 0 10px 24px -4px rgba(0,0,0,${
+              isDarkMode ? 0.65 : 0.22
             })`
           : `0 4px 12px -2px rgba(0,0,0,${isDarkMode ? 0.5 : 0.12})`,
       }}
-      className={`absolute transition-all duration-200 ease-out cursor-pointer rounded-xl select-none flex flex-col justify-between overflow-hidden border backdrop-blur-2xl ${
+      className={`absolute cursor-pointer rounded-xl select-none flex flex-col justify-between overflow-hidden border backdrop-blur-2xl will-change-transform ${
         isSelected
           ? `${activeBorderClass} shadow-2xl`
           : isHovered
-          ? `${borderClass} ring-2 ring-white/50`
+          ? `${borderClass} ring-2 ring-white/60`
           : `${borderClass} ${bgClass}`
       } ${
         isDarkMode
@@ -105,7 +127,7 @@ export const WindowCard: React.FC<Props> = ({
       {/* 顶部彩色装饰条 */}
       <div
         style={{ backgroundColor: theme.accent }}
-        className="h-2 w-full shrink-0 opacity-90 transition-opacity"
+        className="h-2 w-full shrink-0 opacity-95 transition-opacity"
       />
 
       {/* 核心标头内容 */}
@@ -116,7 +138,7 @@ export const WindowCard: React.FC<Props> = ({
               <img
                 src={win.appIcon}
                 alt={win.appName}
-                className="w-5 h-5 rounded-md object-contain shrink-0 shadow-sm"
+                className="w-5 h-5 rounded-md object-contain shrink-0 shadow-xs"
                 loading="lazy"
               />
             ) : (
@@ -160,7 +182,7 @@ export const WindowCard: React.FC<Props> = ({
 
             {/* 序号徽章 */}
             <span
-              className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 shadow-sm ${
+              className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full shrink-0 shadow-xs ${
                 isSelected
                   ? isDarkMode
                     ? "bg-white text-neutral-950 font-black"

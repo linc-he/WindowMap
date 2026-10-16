@@ -74,6 +74,20 @@ function loadSavedSettings(): AppSettings {
   return defaultSettings;
 }
 
+const INVALID_APP_NAMES = new Set([
+  "WindowManager",
+  "Window Server",
+  "WindowServer",
+  "Dock",
+  "控制中心",
+  "通知中心",
+  "ControlCenter",
+  "NotificationCenter",
+  "SystemUIServer",
+  "Spotlight",
+  "loginwindow",
+]);
+
 function filterWindowsForScreen(
   all: WindowInfo[],
   screen: ScreenInfo | null
@@ -81,6 +95,9 @@ function filterWindowsForScreen(
   if (!screen) return { main: [], stage: [] };
 
   const onScreen = all.filter((w) => {
+    if (!w.appName || INVALID_APP_NAMES.has(w.appName) || w.appName.toLowerCase().includes("windowmanager")) {
+      return false;
+    }
     if (w.screenId > 0) {
       return w.screenId === screen.id;
     }
