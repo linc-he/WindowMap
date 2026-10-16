@@ -39,6 +39,12 @@
   - [x] 优化过渡动画、空状态、异常拔插屏幕保护
   - [x] 构建打包验证（`pnpm build` 与 `cargo check` 通过）与 GitHub Actions CI 工作流编写
 
+- [x] **阶段 5：本机生产编译与安装至 /Applications** `complete`
+  - [x] 运行 `pnpm tauri build` 构建 macOS release 产物 (.app / .dmg)
+  - [x] 将构建生成的 `WindowMap.app` 安装至 `/Applications/`
+  - [x] 清除隔离属性（`xattr -cr /Applications/WindowMap.app`）确保系统顺利执行
+  - [x] 启动应用并协助用户完成辅助功能权限授权验证
+
 ---
 
 ## 错误记录与决策表
