@@ -1,0 +1,75 @@
+use crate::macos::accessibility::{is_accessibility_trusted, open_accessibility_settings};
+use crate::macos::activate::activate_window as macos_activate_window;
+use crate::macos::screen::{get_active_screens, get_mouse_screen, ScreenInfo};
+use crate::macos::window::{list_windows as macos_list_windows, WindowInfo};
+use crate::macos::window_ext::position_overlay;
+use tauri::{AppHandle, Manager};
+
+#[tauri::command]
+pub fn get_screens() -> Result<Vec<ScreenInfo>, String> {
+    Ok(get_active_screens())
+}
+
+#[tauri::command]
+pub fn get_current_screen() -> Result<ScreenInfo, String> {
+    get_mouse_screen().ok_or_else(|| "无法获取当前屏幕".to_string())
+}
+
+#[tauri::command]
+pub fn list_windows() -> Result<Vec<WindowInfo>, String> {
+    Ok(macos_list_windows())
+}
+
+#[tauri::command]
+pub fn activate_window(
+    app: AppHandle,
+    pid: i32,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    // 1. 隐藏地图面板
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.hide();
+    }
+
+    // 2. 激活目标窗口
+    macos_activate_window(pid, x, y, width, height)
+}
+
+#[tauri::command]
+pub fn hide_overlay(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn show_overlay(
+    app: AppHandle,
+    anchor: Option<String>,
+    ratio: Option<f64>,
+) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("main") {
+        if let Some(screen) = get_mouse_screen() {
+            let anchor_val = anchor.unwrap_or_else(|| "top-left".to_string());
+            let ratio_val = ratio.unwrap_or(0.25);
+            let _ = position_overlay(&win, &screen, &anchor_val, ratio_val);
+        }
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_accessibility_status() -> Result<bool, String> {
+    Ok(is_accessibility_trusted())
+}
+
+#[tauri::command]
+pub fn request_accessibility_settings() -> Result<(), String> {
+    open_accessibility_settings()
+}
