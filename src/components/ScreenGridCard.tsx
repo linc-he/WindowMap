@@ -34,8 +34,8 @@ export const ScreenGridCard: React.FC<Props> = ({
         position: "absolute",
         left: `${position.x}px`,
         top: `${position.y}px`,
-        width: "390px",
-        height: "275px",
+        width: "410px",
+        height: "280px",
         zIndex: isDragging ? 50 : 10,
         boxShadow: isDragging
           ? "0 24px 48px -12px rgba(0, 0, 0, 0.6), 0 0 20px 2px rgba(56, 189, 248, 0.35)"

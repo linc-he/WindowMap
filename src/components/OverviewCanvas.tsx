@@ -45,8 +45,8 @@ export const OverviewCanvas: React.FC<Props> = ({
   // 计算标准默认自适应网格排版
   const calculateDefaultPositions = useCallback(() => {
     const defaultPos: { [screenId: number]: { x: number; y: number } } = {};
-    const cardW = 390;
-    const cardH = 275;
+    const cardW = 410;
+    const cardH = 280;
     const gapX = 30;
     const gapY = 24;
     const startX = 28;

@@ -61,13 +61,13 @@ export const WindowCard: React.FC<Props> = ({
         width: cardWidth,
         height: cardHeight,
         boxShadow: isSelected
-          ? `0 0 ${mini ? 16 : 30}px -2px ${theme.accent}99, 0 ${
+          ? `0 0 ${mini ? 26 : 30}px -1px ${theme.accent}ee, 0 ${
               mini ? 8 : 16
-            }px ${mini ? 16 : 32}px -4px rgba(0,0,0,${
+            }px ${mini ? 18 : 32}px -4px rgba(0,0,0,${
               isDarkMode ? 0.75 : 0.25
             })`
           : isHovered
-          ? `0 0 ${mini ? 12 : 20}px -2px ${theme.accent}66, 0 ${
+          ? `0 0 ${mini ? 20 : 20}px -1px ${theme.accent}bb, 0 ${
               mini ? 6 : 12
             }px ${mini ? 14 : 24}px -4px rgba(0,0,0,${
               isDarkMode ? 0.6 : 0.18
