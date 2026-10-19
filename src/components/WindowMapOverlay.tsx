@@ -55,9 +55,36 @@ export const WindowMapOverlay: React.FC = () => {
     (settings.theme === "system" &&
       window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-  // 挂载与呼出时获取最新窗口数据
+  // 挂载、窗口被呼出打开、获得焦点时自动获取最新应用及台前调度数据
   useEffect(() => {
-    fetchState();
+    // 首次挂载初始化
+    fetchState({ isOverlayOpen: true });
+
+    const currentWindow = getCurrentWebviewWindow();
+
+    // 1. 监听 Rust 端发出的 overlay-opened 事件（快捷键呼出、托盘点击唤起等）
+    const unlistenOverlayPromise = currentWindow.listen("overlay-opened", () => {
+      fetchState({ isOverlayOpen: true });
+    });
+
+    // 2. 监听窗口获得焦点事件（窗口从隐藏变为显示并激活）
+    const unlistenFocusPromise = currentWindow.onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        fetchState({ isOverlayOpen: true });
+      }
+    });
+
+    // 3. 监听 Web 窗口 focus 事件作为兜底保障
+    const handleFocus = () => {
+      fetchState({ isOverlayOpen: true });
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      unlistenOverlayPromise.then((unlisten) => unlisten());
+      unlistenFocusPromise.then((unlisten) => unlisten());
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [fetchState]);
 
   // 原生窗口最顶部专属拖拽处理器
@@ -381,7 +408,7 @@ export const WindowMapOverlay: React.FC = () => {
 
             {/* 刷新 */}
             <button
-              onClick={() => fetchState()}
+              onClick={() => fetchState({ force: true })}
               title="刷新窗口数据"
               className={`p-1.5 rounded-lg transition cursor-pointer ${
                 isDarkMode

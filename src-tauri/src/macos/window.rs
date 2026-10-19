@@ -179,8 +179,8 @@ pub fn list_windows() -> Vec<WindowInfo> {
                 continue;
             }
 
-            // 过滤尺寸过小的幽灵窗口/状态栏窗口
-            if rect.size.width < 40.0 || rect.size.height < 40.0 {
+            // 过滤尺寸过小的幽灵窗口/状态栏窗口（保留台前调度中较窄的缩略图）
+            if rect.size.width < 20.0 || rect.size.height < 20.0 {
                 continue;
             }
 
@@ -209,15 +209,35 @@ pub fn list_windows() -> Vec<WindowInfo> {
             let screen_id = target_screen.map(|s| s.id).unwrap_or(0);
 
             // 台前调度侧栏应用特征：
-            // 当 macOS 开启 Stage Manager 时，未激活的应用会缩放到屏幕左侧/右侧窄条（宽度通常 < 380，贴边）
+            // 当 macOS 开启 Stage Manager 时，未激活的应用会缩放到屏幕左侧/右侧窄条
             let is_stage_manager = if let Some(s) = target_screen {
-                let is_near_left = rect.origin.x <= s.x + 120.0;
-                let is_near_right = rect.origin.x + rect.size.width >= s.x + s.width - 120.0;
-                let is_narrow_shelf = rect.size.width < 380.0 && rect.size.height < 600.0;
+                let is_near_left = rect.origin.x <= s.x + 160.0;
+                let is_near_right = rect.origin.x + rect.size.width >= s.x + s.width - 160.0;
+                let is_narrow_shelf = rect.size.width < 420.0 && rect.size.height < 650.0;
                 (is_near_left || is_near_right) && is_narrow_shelf
             } else {
                 false
             };
+
+            // 去重：若同一进程已存在完全重叠几何尺寸的窗口，优先保留有具体标题的条目
+            let mut is_duplicate = false;
+            for existing in &mut windows {
+                if existing.pid == pid
+                    && (existing.x - rect.origin.x).abs() < 1.0
+                    && (existing.y - rect.origin.y).abs() < 1.0
+                    && (existing.width - rect.size.width).abs() < 1.0
+                    && (existing.height - rect.size.height).abs() < 1.0
+                {
+                    is_duplicate = true;
+                    if existing.title.is_none() && title.is_some() {
+                        existing.title = title.clone();
+                    }
+                    break;
+                }
+            }
+            if is_duplicate {
+                continue;
+            }
 
             // 9. 提取图标（利用 PID 提取，以 app_name 为缓存 Key）
             let app_icon = extract_app_icon(pid, &app_name);

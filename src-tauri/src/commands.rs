@@ -3,7 +3,7 @@ use crate::macos::activate::activate_window as macos_activate_window;
 use crate::macos::screen::{get_active_screens, get_mouse_screen, ScreenInfo};
 use crate::macos::window::{list_windows as macos_list_windows, WindowInfo};
 use crate::macos::window_ext::position_overlay;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[tauri::command]
@@ -64,6 +64,7 @@ pub fn show_overlay(
         }
         let _ = win.show();
         let _ = win.set_focus();
+        let _ = win.emit("overlay-opened", ());
     }
     Ok(())
 }

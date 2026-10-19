@@ -29,7 +29,7 @@ interface State {
   settings: AppSettings;
 
   setViewMode: (mode: ViewMode) => void;
-  fetchState: () => Promise<void>;
+  fetchState: (options?: { isOverlayOpen?: boolean; force?: boolean }) => Promise<void>;
   setSelectedScreenId: (id: number) => void;
   getActiveScreen: () => ScreenInfo | null;
   getWindowsForScreen: (screenId: number) => { main: WindowInfo[]; stage: WindowInfo[] };
@@ -121,6 +121,10 @@ function filterWindowsForScreen(
   return { main, stage };
 }
 
+let lastFetchTime = 0;
+let isFetchingInProgress = false;
+let pendingFetchRequest: { isOverlayOpen?: boolean; force?: boolean } | null = null;
+
 export const useStore = create<State>((set, get) => ({
   viewMode: "overview",
   screens: [],
@@ -178,7 +182,20 @@ export const useStore = create<State>((set, get) => ({
     });
   },
 
-  fetchState: async () => {
+  fetchState: async (options?: { isOverlayOpen?: boolean; force?: boolean }) => {
+    const now = Date.now();
+    if (isFetchingInProgress) {
+      pendingFetchRequest = options || {};
+      return;
+    }
+    // 过滤短时间内（150ms）由不同事件（focus, overlay-opened）引起的重复抓取
+    if (!options?.force && now - lastFetchTime < 150) {
+      return;
+    }
+
+    isFetchingInProgress = true;
+    lastFetchTime = now;
+
     try {
       set({ isLoading: true });
       const [screens, currentScreen, allWindows, isAccessibilityGranted] =
@@ -190,10 +207,12 @@ export const useStore = create<State>((set, get) => ({
         ]);
 
       const state = get();
-      const activeScreen =
-        state.selectedScreenId !== null
-          ? screens.find((s) => s.id === state.selectedScreenId) || currentScreen
-          : currentScreen || screens[0];
+      // 当窗口刚打开时，自动跟随当前鼠标所在屏幕；若用户在界面上手动切换过屏幕，则保留选中屏幕
+      const activeScreen = options?.isOverlayOpen
+        ? currentScreen || screens[0] || null
+        : state.selectedScreenId !== null
+        ? screens.find((s) => s.id === state.selectedScreenId) || currentScreen || screens[0] || null
+        : currentScreen || screens[0] || null;
 
       const { main, stage } = filterWindowsForScreen(allWindows, activeScreen);
 
@@ -211,6 +230,13 @@ export const useStore = create<State>((set, get) => ({
     } catch (e) {
       console.error("fetchState 错误:", e);
       set({ isLoading: false });
+    } finally {
+      isFetchingInProgress = false;
+      if (pendingFetchRequest) {
+        const nextOpts = pendingFetchRequest;
+        pendingFetchRequest = null;
+        get().fetchState(nextOpts);
+      }
     }
   },
 
@@ -232,6 +258,13 @@ export const useStore = create<State>((set, get) => ({
         height: win.height,
         closeOverlay: settings.closeOnActivate,
       });
+
+      // 若设置了“激活应用后不关闭地图”，等待系统动画完成后自动刷新窗口状态与台前调度
+      if (!settings.closeOnActivate) {
+        setTimeout(() => {
+          get().fetchState({ force: true });
+        }, 350);
+      }
     } catch (e) {
       console.error("激活窗口失败:", e);
     }

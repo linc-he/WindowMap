@@ -58,6 +58,11 @@ pub fn run() {
             commands::update_global_shortcut,
             commands::apply_panel_settings,
         ])
-        .run(tauri::generate_context!())
-        .expect("运行 WindowMap 应用程序出错");
+        .build(tauri::generate_context!())
+        .expect("运行 WindowMap 应用程序出错")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Reopen { .. } = event {
+                let _ = commands::show_overlay(app_handle.clone(), None, None);
+            }
+        });
 }
