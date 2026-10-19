@@ -11,6 +11,7 @@ interface Props {
   isDarkMode: boolean;
   showTitles: boolean;
   compact?: boolean;
+  mini?: boolean;
   style?: React.CSSProperties;
   onSelect: () => void;
   onActivate: () => void;
@@ -26,6 +27,7 @@ export const WindowCard: React.FC<Props> = ({
   isDarkMode,
   showTitles,
   compact = false,
+  mini = false,
   style,
   onSelect,
   onActivate,
@@ -41,8 +43,8 @@ export const WindowCard: React.FC<Props> = ({
     : theme.activeBorderLight;
   const badgeClass = isDarkMode ? theme.badgeDark : theme.badgeLight;
 
-  const cardWidth = compact ? "188px" : "244px";
-  const cardHeight = compact ? "118px" : "152px";
+  const cardWidth = mini ? "132px" : compact ? "188px" : "244px";
+  const cardHeight = mini ? "84px" : compact ? "118px" : "152px";
 
   return (
     <div
@@ -59,18 +61,24 @@ export const WindowCard: React.FC<Props> = ({
         width: cardWidth,
         height: cardHeight,
         boxShadow: isSelected
-          ? `0 0 30px -2px ${theme.accent}99, 0 16px 32px -4px rgba(0,0,0,${
+          ? `0 0 ${mini ? 16 : 30}px -2px ${theme.accent}99, 0 ${
+              mini ? 8 : 16
+            }px ${mini ? 16 : 32}px -4px rgba(0,0,0,${
               isDarkMode ? 0.75 : 0.25
             })`
           : isHovered
-          ? `0 0 20px -2px ${theme.accent}66, 0 12px 24px -4px rgba(0,0,0,${
+          ? `0 0 ${mini ? 12 : 20}px -2px ${theme.accent}66, 0 ${
+              mini ? 6 : 12
+            }px ${mini ? 14 : 24}px -4px rgba(0,0,0,${
               isDarkMode ? 0.6 : 0.18
             })`
-          : `0 6px 16px -2px rgba(0,0,0,${isDarkMode ? 0.45 : 0.1})`,
+          : `0 ${mini ? 3 : 6}px ${mini ? 8 : 16}px -2px rgba(0,0,0,${
+              isDarkMode ? 0.45 : 0.1
+            })`,
         ...style,
       }}
       className={`group cursor-pointer ${
-        compact ? "rounded-xl" : "rounded-2xl"
+        mini ? "rounded-lg" : compact ? "rounded-xl" : "rounded-2xl"
       } select-none flex flex-col justify-between overflow-hidden border backdrop-blur-2xl will-change-transform ${
         isSelected
           ? `${activeBorderClass} shadow-2xl ring-2 ${
@@ -89,46 +97,58 @@ export const WindowCard: React.FC<Props> = ({
       <div
         style={{ backgroundColor: theme.accent }}
         className={`${
-          compact ? "h-1.5" : "h-2"
+          mini ? "h-1" : compact ? "h-1.5" : "h-2"
         } w-full shrink-0 opacity-95 transition-opacity`}
       />
 
       {/* 核心卡片内容区域 */}
       <div
         className={`${
-          compact ? "p-2" : "p-3"
+          mini ? "p-1.5" : compact ? "p-2" : "p-3"
         } flex-1 flex flex-col justify-between overflow-hidden pointer-events-none`}
       >
         {/* 顶部标头：大图标 + 应用名 + 序号徽章 */}
-        <div className="flex items-center justify-between gap-1.5 w-full">
-          <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center justify-between gap-1 w-full">
+          <div className="flex items-center gap-1 min-w-0">
             {win.appIcon ? (
               <img
                 src={win.appIcon}
                 alt={win.appName}
                 className={`${
-                  compact ? "w-5 h-5 rounded-md" : "w-7 h-7 rounded-lg"
+                  mini
+                    ? "w-4 h-4 rounded"
+                    : compact
+                    ? "w-5 h-5 rounded-md"
+                    : "w-7 h-7 rounded-lg"
                 } object-contain shrink-0 shadow-xs group-hover:scale-105 transition-transform`}
                 loading="lazy"
               />
             ) : (
               <div
                 className={`${
-                  compact ? "w-5 h-5 rounded-md" : "w-7 h-7 rounded-lg"
+                  mini
+                    ? "w-4 h-4 rounded"
+                    : compact
+                    ? "w-5 h-5 rounded-md"
+                    : "w-7 h-7 rounded-lg"
                 } flex items-center justify-center shrink-0 ${
                   isDarkMode ? "bg-white/10" : "bg-neutral-200"
                 }`}
               >
                 <AppWindow
-                  className={`${compact ? "w-3 h-3" : "w-4 h-4"} ${
-                    isDarkMode ? "text-neutral-300" : "text-neutral-600"
-                  }`}
+                  className={`${
+                    mini ? "w-2.5 h-2.5" : compact ? "w-3 h-3" : "w-4 h-4"
+                  } ${isDarkMode ? "text-neutral-300" : "text-neutral-600"}`}
                 />
               </div>
             )}
             <span
               className={`${
-                compact ? "text-xs font-bold" : "text-sm font-bold"
+                mini
+                  ? "text-[10px] font-bold"
+                  : compact
+                  ? "text-xs font-bold"
+                  : "text-sm font-bold"
               } truncate tracking-wide ${
                 isDarkMode ? "text-white" : "text-neutral-900"
               }`}
@@ -137,11 +157,15 @@ export const WindowCard: React.FC<Props> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-0.5 shrink-0">
             {/* 序号徽章 */}
             <span
               className={`${
-                compact ? "text-[9px] px-1.5 py-0.2" : "text-[11px] px-2 py-0.5"
+                mini
+                  ? "text-[7.5px] px-1 py-0.2"
+                  : compact
+                  ? "text-[9px] px-1.5 py-0.2"
+                  : "text-[11px] px-2 py-0.5"
               } font-mono rounded-full shrink-0 shadow-xs ${
                 isSelected
                   ? isDarkMode
@@ -156,29 +180,27 @@ export const WindowCard: React.FC<Props> = ({
         </div>
 
         {/* 窗口真实标题显示（清晰单行截断或展开） */}
-        <div className={`${compact ? "my-0.5" : "my-1.5"} min-w-0`}>
+        <div className={`${mini ? "my-0.2" : compact ? "my-0.5" : "my-1.5"} min-w-0`}>
           {showTitles && win.title ? (
             <div
               className={`${
-                compact ? "px-1.5 py-0.5" : "px-2 py-1"
+                mini
+                  ? "px-1 py-0.2 text-[8px]"
+                  : compact
+                  ? "px-1.5 py-0.5 text-[10px]"
+                  : "px-2 py-1 text-xs"
               } rounded-md border truncate ${
                 isDarkMode
                   ? "bg-black/35 border-white/10 text-neutral-200"
                   : "bg-neutral-100 border-neutral-300 text-neutral-700"
               }`}
             >
-              <p
-                className={`${
-                  compact ? "text-[10px]" : "text-xs"
-                } truncate font-medium`}
-              >
-                {win.title}
-              </p>
+              <p className="truncate font-medium">{win.title}</p>
             </div>
           ) : (
             <div
               className={`${
-                compact ? "h-4 text-[9px]" : "h-6 text-[11px]"
+                mini ? "h-3 text-[7.5px]" : compact ? "h-4 text-[9px]" : "h-6 text-[11px]"
               } flex items-center text-neutral-400 font-normal truncate`}
             >
               <span>正常运行中</span>
@@ -189,7 +211,11 @@ export const WindowCard: React.FC<Props> = ({
         {/* 底部信息栏 */}
         <div
           className={`flex items-center justify-between ${
-            compact ? "text-[8.5px] pt-0.5" : "text-[10px] pt-1"
+            mini
+              ? "text-[7px] pt-0.2"
+              : compact
+              ? "text-[8.5px] pt-0.5"
+              : "text-[10px] pt-1"
           } font-mono border-t ${
             isDarkMode
               ? "border-white/5 text-neutral-400"
@@ -200,8 +226,12 @@ export const WindowCard: React.FC<Props> = ({
             {Math.round(win.width)}×{Math.round(win.height)}
           </span>
           <span className="flex items-center gap-0.5 font-semibold opacity-0 group-hover:opacity-100 transition-opacity text-sky-400">
-            <ExternalLink className={`${compact ? "w-2 h-2" : "w-2.5 h-2.5"}`} />
-            点击激活
+            <ExternalLink
+              className={`${
+                mini ? "w-1.5 h-1.5" : compact ? "w-2 h-2" : "w-2.5 h-2.5"
+              }`}
+            />
+            激活
           </span>
         </div>
       </div>
