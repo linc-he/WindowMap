@@ -10,6 +10,7 @@ import {
   Sun,
   Moon,
   Move,
+  GripHorizontal,
 } from "lucide-react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useStore } from "../store/useStore";
@@ -53,10 +54,11 @@ export const WindowMapOverlay: React.FC = () => {
   }, [fetchState]);
 
   // 原生窗口顶部拖拽处理器
-  const handleHeaderMouseDown = (e: React.MouseEvent) => {
+  const handleHeaderMouseDown = async (e: React.MouseEvent) => {
+    // 仅响应鼠标左键拖拽
     if (e.button === 0) {
       try {
-        getCurrentWebviewWindow().startDragging();
+        await getCurrentWebviewWindow().startDragging();
       } catch (err) {
         console.error("拖拽窗口异常:", err);
       }
@@ -144,7 +146,47 @@ export const WindowMapOverlay: React.FC = () => {
             : "bg-neutral-100/95 border-neutral-300 text-neutral-900 shadow-2xl"
         }`}
       >
-        {/* 顶部标题与拖拽控制栏（按住空白位置即可原生移动整个窗口） */}
+        {/* 窗口最顶部专属拖拽区域（按住可平移窗口） */}
+        <div
+          data-tauri-drag-region
+          onMouseDown={handleHeaderMouseDown}
+          className={`w-full h-7 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing border-b shrink-0 select-none transition-colors group relative ${
+            isDarkMode
+              ? "bg-neutral-950/40 hover:bg-neutral-950/70 border-white/5"
+              : "bg-neutral-200/40 hover:bg-neutral-200/70 border-neutral-300/50"
+          }`}
+          title="按住此处可自由拖动窗口位置"
+        >
+          {/* 左侧提示标识 */}
+          <div className="flex items-center gap-1.5 opacity-40 group-hover:opacity-90 transition-opacity pointer-events-none">
+            <Move className="w-3 h-3 text-sky-400" />
+            <span
+              className={`text-[10px] font-medium tracking-wider ${
+                isDarkMode ? "text-neutral-300" : "text-neutral-600"
+              }`}
+            >
+              按住拖动窗口
+            </span>
+          </div>
+
+          {/* 居中原生抓手胶囊条 (Mac 风格拖拽手柄) */}
+          <div className="flex items-center gap-1.5 pointer-events-none">
+            <div
+              className={`w-16 h-1 rounded-full transition-all duration-200 group-hover:w-28 group-hover:h-1.5 flex items-center justify-center ${
+                isDarkMode
+                  ? "bg-white/20 group-hover:bg-sky-400/70 shadow-xs"
+                  : "bg-neutral-400/50 group-hover:bg-sky-500/80 shadow-xs"
+              }`}
+            />
+          </div>
+
+          {/* 右侧微弱提示 */}
+          <div className="flex items-center gap-1 opacity-30 group-hover:opacity-75 transition-opacity pointer-events-none text-[10px]">
+            <GripHorizontal className="w-3.5 h-3.5" />
+          </div>
+        </div>
+
+        {/* 顶部标题与拖拽控制栏（按住空白位置亦可原生移动整个窗口） */}
         <div
           data-tauri-drag-region
           onMouseDown={handleHeaderMouseDown}

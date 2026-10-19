@@ -23,6 +23,9 @@ pub fn setup_overlay_window(window: &WebviewWindow) {
 
                 // 允许窗口在失去焦点时也能捕获点击
                 let _: () = msg_send![ns_window, setHidesOnDeactivate: false];
+
+                // 明确设置无边框窗口可被拖动
+                let _: () = msg_send![ns_window, setMovable: true];
             }
         }
     }

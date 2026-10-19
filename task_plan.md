@@ -43,3 +43,24 @@
   - [x] `pnpm tauri build` 编译 release
   - [x] 覆盖安装至 `/Applications/WindowMap.app` 并重启验证
   - [x] 提交代码并推送到 GitHub `main` 分支
+
+---
+
+## 阶段五实施任务清单：顶部专属拖拽区域、打包安装与 GitHub 提交
+
+- [x] **任务 1：配置 Tauri 权限与原生拖拽基础能力** `complete`
+  - [x] 在 `src-tauri/capabilities/default.json` 补充 `core:window:default` 与 `core:window:allow-start-dragging` 授权
+  - [x] 在 `src-tauri/src/macos/window_ext.rs` 显式设置 NSWindow `setMovable: true`
+
+- [x] **任务 2：设计并实现顶部专属原生拖拽手柄条** `complete`
+  - [x] 在 `src/components/WindowMapOverlay.tsx` 顶部卡片首行增加专属拖拽区域
+  - [x] 配备 `data-tauri-drag-region` 与 `handleHeaderMouseDown` 异步拖拽触发
+  - [x] 居中 macOS 风格动态抓手胶囊（Hover 展开加宽并高亮天蓝色）
+  - [x] 左右提示标识与 `GripHorizontal` 图标，光标状态切换 `cursor-grab / cursor-grabbing`
+
+- [x] **任务 3：编译打包与覆盖安装** `complete`
+  - [x] 执行 `pnpm tauri build` 编译 release 二进制与 `.app` Bundle
+  - [x] 覆盖安装至 `/Applications/WindowMap.app` 并重启验证
+
+- [x] **任务 4：代码提交与推送** `complete`
+  - [x] 按照规范提交代码并推送到 GitHub `main` 分支
