@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { AppSettings, ScreenInfo, WindowInfo } from "../types";
+import { AppSettings, ScreenInfo, WindowInfo, ViewMode } from "../types";
 
 export function applyTheme(theme: "dark" | "light" | "system") {
   const isDark =
@@ -15,21 +15,25 @@ export function applyTheme(theme: "dark" | "light" | "system") {
 }
 
 interface State {
+  viewMode: ViewMode;
   screens: ScreenInfo[];
   currentScreen: ScreenInfo | null;
   selectedScreenId: number | null;
   allWindows: WindowInfo[];
-  windows: WindowInfo[]; // 主工作区活跃窗口
-  stageWindows: WindowInfo[]; // 台前调度收纳窗口
+  windows: WindowInfo[]; // 主工作区活跃窗口（单屏模式使用）
+  stageWindows: WindowInfo[]; // 台前调度收纳窗口（单屏模式使用）
   selectedIndex: number;
   isAccessibilityGranted: boolean;
   showSettings: boolean;
   isLoading: boolean;
   settings: AppSettings;
 
+  setViewMode: (mode: ViewMode) => void;
   fetchState: () => Promise<void>;
   setSelectedScreenId: (id: number) => void;
   getActiveScreen: () => ScreenInfo | null;
+  getWindowsForScreen: (screenId: number) => { main: WindowInfo[]; stage: WindowInfo[] };
+  getAllStageWindowsGrouped: () => { screen: ScreenInfo; windows: WindowInfo[] }[];
   activateSelected: () => Promise<void>;
   activateWindow: (win: WindowInfo) => Promise<void>;
   hideOverlay: () => Promise<void>;
@@ -118,6 +122,7 @@ function filterWindowsForScreen(
 }
 
 export const useStore = create<State>((set, get) => ({
+  viewMode: "overview",
   screens: [],
   currentScreen: null,
   selectedScreenId: null,
@@ -130,6 +135,10 @@ export const useStore = create<State>((set, get) => ({
   isLoading: false,
   settings: loadSavedSettings(),
 
+  setViewMode: (mode: ViewMode) => {
+    set({ viewMode: mode });
+  },
+
   getActiveScreen: () => {
     const { screens, currentScreen, selectedScreenId } = get();
     if (selectedScreenId !== null) {
@@ -137,6 +146,23 @@ export const useStore = create<State>((set, get) => ({
       if (found) return found;
     }
     return currentScreen || screens[0] || null;
+  },
+
+  getWindowsForScreen: (screenId: number) => {
+    const { allWindows, screens } = get();
+    const screen = screens.find((s) => s.id === screenId) || null;
+    return filterWindowsForScreen(allWindows, screen);
+  },
+
+  getAllStageWindowsGrouped: () => {
+    const { screens, allWindows } = get();
+    return screens.map((screen) => {
+      const { stage } = filterWindowsForScreen(allWindows, screen);
+      return {
+        screen,
+        windows: stage,
+      };
+    });
   },
 
   setSelectedScreenId: (id: number) => {

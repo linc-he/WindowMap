@@ -1,61 +1,66 @@
-import React, { useState, useRef, useEffect } from "react";
-import { AppWindow, ExternalLink, Sparkles } from "lucide-react";
-import { WindowInfo } from "../types";
+import React, { useState } from "react";
+import { AppWindow, ExternalLink, Sparkles, Monitor } from "lucide-react";
+import { WindowInfo, ScreenInfo } from "../types";
+
+export interface ScreenStageGroup {
+  screen: ScreenInfo;
+  windows: WindowInfo[];
+}
 
 interface Props {
-  windows: WindowInfo[];
+  windows?: WindowInfo[];
+  screenGroups?: ScreenStageGroup[];
   isDarkMode: boolean;
   onActivate: (win: WindowInfo) => void;
 }
 
 export const StageManagerShelf: React.FC<Props> = ({
   windows,
+  screenGroups,
   isDarkMode,
   onActivate,
 }) => {
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [hoveredWin, setHoveredWin] = useState<WindowInfo | null>(null);
   const [popoverPos, setPopoverPos] = useState<{ top: number; right: number }>({
     top: 0,
     right: 0,
   });
 
-  const listContainerRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const [indicatorStyle, setIndicatorStyle] = useState<{
-    top: number;
-    height: number;
-    opacity: number;
-  }>({
-    top: 0,
-    height: 0,
-    opacity: 0,
-  });
-
-  // 动态同步 AnimatedList 滑动胶囊指示器 (Gliding Selection Pill)
-  useEffect(() => {
-    if (selectedIndex >= 0 && itemRefs.current[selectedIndex]) {
-      const el = itemRefs.current[selectedIndex];
-      if (el) {
-        setIndicatorStyle({
-          top: el.offsetTop,
-          height: el.offsetHeight,
-          opacity: 1,
-        });
-      }
-    } else {
-      setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
+  // 统一整理为多屏幕分组数据
+  const groups: ScreenStageGroup[] = React.useMemo(() => {
+    if (screenGroups && screenGroups.length > 0) {
+      return screenGroups;
     }
-  }, [selectedIndex, windows]);
+    if (windows && windows.length > 0) {
+      return [
+        {
+          screen: {
+            id: 0,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            scale: 1,
+            isMain: true,
+          },
+          windows,
+        },
+      ];
+    }
+    return [];
+  }, [screenGroups, windows]);
 
-  if (windows.length === 0) return null;
+  // 计算总收纳应用数量
+  const totalCount = groups.reduce((acc, g) => acc + g.windows.length, 0);
+
+  if (totalCount === 0) return null;
 
   return (
     <div
-      className={`w-60 h-full flex flex-col shrink-0 border-l rounded-r-xl overflow-hidden transition-colors ${
+      className={`w-64 h-full flex flex-col shrink-0 border-l rounded-r-xl overflow-hidden transition-colors ${
         isDarkMode
-          ? "bg-neutral-950/70 border-white/10 text-white"
-          : "bg-neutral-50/90 border-neutral-300 text-neutral-900"
+          ? "bg-neutral-950/75 border-white/10 text-white"
+          : "bg-neutral-50/95 border-neutral-300 text-neutral-900"
       }`}
     >
       {/* 侧栏标头 */}
@@ -69,6 +74,11 @@ export const StageManagerShelf: React.FC<Props> = ({
         <div className="flex items-center gap-1.5 font-semibold text-xs">
           <Sparkles className="w-3.5 h-3.5 text-purple-400" />
           <span>台前调度</span>
+          {screenGroups && (
+            <span className="text-[10px] text-purple-400 font-normal">
+              (全部屏幕)
+            </span>
+          )}
         </div>
         <span
           className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
@@ -77,122 +87,133 @@ export const StageManagerShelf: React.FC<Props> = ({
               : "bg-purple-100 text-purple-700 border border-purple-300"
           }`}
         >
-          {windows.length} 个应用
+          {totalCount} 个应用
         </span>
       </div>
 
-      {/* AnimatedList 动效列表容器（带上下边缘渐变虚化遮罩 Fade Mask） */}
+      {/* 滚动列表容器 */}
       <div
-        ref={listContainerRef}
         style={{
           maskImage:
-            "linear-gradient(to bottom, transparent 0%, black 14px, black calc(100% - 14px), transparent 100%)",
+            "linear-gradient(to bottom, transparent 0%, black 10px, black calc(100% - 10px), transparent 100%)",
           WebkitMaskImage:
-            "linear-gradient(to bottom, transparent 0%, black 14px, black calc(100% - 14px), transparent 100%)",
+            "linear-gradient(to bottom, transparent 0%, black 10px, black calc(100% - 10px), transparent 100%)",
         }}
-        className="flex-1 overflow-y-auto p-2 relative"
+        className="flex-1 overflow-y-auto p-2.5 relative space-y-4"
       >
-        {/* 滑动的背景选择胶囊光标 (Gliding Pill Indicator) */}
-        <div
-          style={{
-            transform: `translate3d(0, ${indicatorStyle.top}px, 0)`,
-            height: `${indicatorStyle.height}px`,
-            opacity: indicatorStyle.opacity,
-            transition:
-              "transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.2s ease, opacity 0.15s ease",
-          }}
-          className={`absolute left-2 right-2 rounded-xl pointer-events-none z-0 border ${
-            isDarkMode
-              ? "bg-purple-500/15 border-purple-400/40 shadow-sm shadow-purple-500/20"
-              : "bg-purple-500/10 border-purple-400/50 shadow-xs"
-          }`}
-        />
+        {groups.map((group, groupIdx) => {
+          if (group.windows.length === 0) return null;
 
-        {/* 列表项集合 */}
-        <div className="space-y-1.5 relative z-10">
-          {windows.map((win, idx) => {
-            const isSelected = selectedIndex === idx;
-            return (
-              <div
-                key={`${win.windowId}-${win.pid}-${idx}`}
-                ref={(el) => {
-                  itemRefs.current[idx] = el;
-                }}
-                onClick={() => {
-                  setSelectedIndex(idx);
-                  onActivate(win);
-                }}
-                onMouseEnter={(e) => {
-                  setSelectedIndex(idx);
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setPopoverPos({
-                    top: Math.max(10, rect.top - 60),
-                    right: window.innerWidth - rect.left + 12,
-                  });
-                  setHoveredWin(win);
-                }}
-                onMouseLeave={() => setHoveredWin(null)}
-                className={`group flex items-center gap-2.5 p-2 rounded-xl border transition-all duration-150 cursor-pointer ${
-                  isSelected
-                    ? isDarkMode
-                      ? "border-transparent"
-                      : "border-transparent"
-                    : isDarkMode
-                    ? "bg-neutral-900/40 border-white/5 hover:border-white/10"
-                    : "bg-white/70 border-neutral-200/80 hover:border-neutral-300"
-                }`}
-              >
-                {/* 应用图标 */}
-                {win.appIcon ? (
-                  <img
-                    src={win.appIcon}
-                    alt={win.appName}
-                    className="w-6 h-6 rounded-md object-contain shrink-0 shadow-xs group-hover:scale-105 transition-transform"
-                  />
-                ) : (
-                  <div
-                    className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
-                      isDarkMode ? "bg-white/10" : "bg-neutral-200"
+          return (
+            <div
+              key={group.screen.id || groupIdx}
+              className={`rounded-xl border p-1.5 transition-colors ${
+                isDarkMode
+                  ? "bg-neutral-900/35 border-purple-500/20"
+                  : "bg-purple-50/50 border-purple-200/60"
+              }`}
+            >
+              {/* 多屏幕时的专属分组标头（显著区分） */}
+              {screenGroups && (
+                <div
+                  className={`flex items-center justify-between px-2 py-1 mb-1.5 rounded-lg border text-xs font-semibold ${
+                    isDarkMode
+                      ? "bg-purple-950/60 border-purple-400/30 text-purple-300 shadow-xs"
+                      : "bg-purple-100/90 border-purple-300 text-purple-900 shadow-xs"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Monitor className="w-3.5 h-3.5 text-purple-400" />
+                    <span>
+                      屏幕 {groupIdx + 1}
+                      {group.screen.isMain && (
+                        <span className="ml-1 text-[10px] opacity-80">(主屏)</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <span
+                    className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold ${
+                      isDarkMode
+                        ? "bg-purple-500/30 text-purple-200"
+                        : "bg-purple-200/90 text-purple-800"
                     }`}
                   >
-                    <AppWindow className="w-3.5 h-3.5 text-neutral-400" />
-                  </div>
-                )}
-
-                {/* 应用名称与标题 */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold truncate leading-tight">
-                    {win.appName}
-                  </p>
-                  {win.title ? (
-                    <p
-                      className={`text-[10px] truncate ${
-                        isDarkMode ? "text-neutral-400" : "text-neutral-500"
-                      }`}
-                    >
-                      {win.title}
-                    </p>
-                  ) : (
-                    <p
-                      className={`text-[9px] font-mono ${
-                        isDarkMode ? "text-neutral-500" : "text-neutral-400"
-                      }`}
-                    >
-                      {Math.round(win.width)}×{Math.round(win.height)}
-                    </p>
-                  )}
+                    {group.windows.length} 个
+                  </span>
                 </div>
+              )}
 
-                {/* 激活指示图标 */}
-                <ExternalLink
-                  className={`w-3 h-3 shrink-0 text-purple-400 transition-opacity ${
-                    isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                  }`}
-                />
+              {/* 该屏幕下的台前调度应用项列表 */}
+              <div className="space-y-1">
+                {group.windows.map((win, idx) => (
+                  <div
+                    key={`${win.windowId}-${win.pid}-${idx}`}
+                    onClick={() => onActivate(win)}
+                    onMouseEnter={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setPopoverPos({
+                        top: Math.max(10, rect.top - 50),
+                        right: window.innerWidth - rect.left + 12,
+                      });
+                      setHoveredWin(win);
+                    }}
+                    onMouseLeave={() => setHoveredWin(null)}
+                    className={`group flex items-center gap-2.5 p-2 rounded-xl border transition-all duration-150 cursor-pointer ${
+                      isDarkMode
+                        ? "bg-neutral-900/60 border-white/5 hover:border-purple-400/40 hover:bg-purple-500/10"
+                        : "bg-white/80 border-neutral-200/90 hover:border-purple-400/60 hover:bg-purple-50/80"
+                    }`}
+                  >
+                    {/* 应用图标 */}
+                    {win.appIcon ? (
+                      <img
+                        src={win.appIcon}
+                        alt={win.appName}
+                        className="w-6 h-6 rounded-md object-contain shrink-0 shadow-xs group-hover:scale-105 transition-transform"
+                      />
+                    ) : (
+                      <div
+                        className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${
+                          isDarkMode ? "bg-white/10" : "bg-neutral-200"
+                        }`}
+                      >
+                        <AppWindow className="w-3.5 h-3.5 text-neutral-400" />
+                      </div>
+                    )}
+
+                    {/* 应用名称与标题 */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate leading-tight">
+                        {win.appName}
+                      </p>
+                      {win.title ? (
+                        <p
+                          className={`text-[10px] truncate ${
+                            isDarkMode ? "text-neutral-400" : "text-neutral-500"
+                          }`}
+                        >
+                          {win.title}
+                        </p>
+                      ) : (
+                        <p
+                          className={`text-[9px] font-mono ${
+                            isDarkMode ? "text-neutral-500" : "text-neutral-400"
+                          }`}
+                        >
+                          {Math.round(win.width)}×{Math.round(win.height)}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 激活指示图标 */}
+                    <ExternalLink className="w-3 h-3 shrink-0 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* 悬浮 Popover 详情卡片 */}

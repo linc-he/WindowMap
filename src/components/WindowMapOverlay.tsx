@@ -11,9 +11,11 @@ import {
   Moon,
   Move,
   GripHorizontal,
+  LayoutGrid,
 } from "lucide-react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useStore } from "../store/useStore";
+import { OverviewCanvas } from "./OverviewCanvas";
 import { WindowBounceDeck } from "./WindowBounceDeck";
 import { StageManagerShelf } from "./StageManagerShelf";
 import { PermissionGuide } from "./PermissionGuide";
@@ -21,15 +23,20 @@ import { SettingsModal } from "./SettingsModal";
 
 export const WindowMapOverlay: React.FC = () => {
   const {
+    viewMode,
     screens,
     windows,
     stageWindows,
+    allWindows,
     selectedIndex,
     settings,
     isLoading,
     fetchState,
+    setViewMode,
     setSelectedScreenId,
     getActiveScreen,
+    getWindowsForScreen,
+    getAllStageWindowsGrouped,
     activateWindow,
     activateSelected,
     hideOverlay,
@@ -53,7 +60,7 @@ export const WindowMapOverlay: React.FC = () => {
     fetchState();
   }, [fetchState]);
 
-  // 原生窗口顶部拖拽处理器
+  // 原生窗口最顶部专属拖拽处理器
   const handleHeaderMouseDown = async (e: React.MouseEvent) => {
     // 仅响应鼠标左键拖拽
     if (e.button === 0) {
@@ -65,15 +72,23 @@ export const WindowMapOverlay: React.FC = () => {
     }
   };
 
-  // 全局键盘快捷键导航与数字键切屏监听
+  // 全局键盘快捷键导航、0 概览与数字键 1-9 单屏监听
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // 数字键 1-9 切换显示器
+      // 快捷键 0 切换到概览模式
+      if (e.key === "0") {
+        e.preventDefault();
+        setViewMode("overview");
+        return;
+      }
+
+      // 数字键 1-9 切换对应显示器单屏
       if (e.key >= "1" && e.key <= "9") {
         const screenIndex = parseInt(e.key) - 1;
         if (screenIndex < screens.length) {
           e.preventDefault();
           setSelectedScreenId(screens[screenIndex].id);
+          setViewMode("single");
           return;
         }
       }
@@ -84,37 +99,51 @@ export const WindowMapOverlay: React.FC = () => {
           hideOverlay();
           break;
         case "Enter":
-          e.preventDefault();
-          activateSelected();
+          if (viewMode === "single") {
+            e.preventDefault();
+            activateSelected();
+          }
           break;
         case "Tab":
-          e.preventDefault();
-          if (e.shiftKey) {
-            navigatePrev();
-          } else {
-            navigateNext();
+          if (viewMode === "single") {
+            e.preventDefault();
+            if (e.shiftKey) {
+              navigatePrev();
+            } else {
+              navigateNext();
+            }
           }
           break;
         case "ArrowRight":
-          e.preventDefault();
-          navigateDirection("right");
+          if (viewMode === "single") {
+            e.preventDefault();
+            navigateDirection("right");
+          }
           break;
         case "ArrowLeft":
-          e.preventDefault();
-          navigateDirection("left");
+          if (viewMode === "single") {
+            e.preventDefault();
+            navigateDirection("left");
+          }
           break;
         case "ArrowDown":
-          e.preventDefault();
-          navigateDirection("down");
+          if (viewMode === "single") {
+            e.preventDefault();
+            navigateDirection("down");
+          }
           break;
         case "ArrowUp":
-          e.preventDefault();
-          navigateDirection("up");
+          if (viewMode === "single") {
+            e.preventDefault();
+            navigateDirection("up");
+          }
           break;
       }
     },
     [
       screens,
+      viewMode,
+      setViewMode,
       setSelectedScreenId,
       hideOverlay,
       activateSelected,
@@ -129,8 +158,24 @@ export const WindowMapOverlay: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  // 台前调度侧栏统计
+  const allStageGroups = getAllStageWindowsGrouped();
+  const totalStageCount = allStageGroups.reduce(
+    (acc, g) => acc + g.windows.length,
+    0
+  );
+  const currentStageCount =
+    viewMode === "overview" ? totalStageCount : stageWindows.length;
   const showStageShelf =
-    settings.includeStageManager && stageWindows.length > 0;
+    settings.includeStageManager && currentStageCount > 0;
+
+  // 总普通活跃应用计数
+  const totalMainCount = allWindows.filter(
+    (w) =>
+      !w.isStageManager &&
+      w.appName &&
+      !w.appName.toLowerCase().includes("windowmanager")
+  ).length;
 
   return (
     <div
@@ -146,7 +191,7 @@ export const WindowMapOverlay: React.FC = () => {
             : "bg-neutral-100/95 border-neutral-300 text-neutral-900 shadow-2xl"
         }`}
       >
-        {/* 窗口最顶部专属拖拽区域（按住可平移窗口） */}
+        {/* 窗口最顶部专属拖拽区域（按住可平移整个窗口） */}
         <div
           data-tauri-drag-region
           onMouseDown={handleHeaderMouseDown}
@@ -155,7 +200,7 @@ export const WindowMapOverlay: React.FC = () => {
               ? "bg-neutral-950/40 hover:bg-neutral-950/70 border-white/5"
               : "bg-neutral-200/40 hover:bg-neutral-200/70 border-neutral-300/50"
           }`}
-          title="按住此处可自由拖动窗口位置"
+          title="按住此处可自由拖动浮层窗口位置"
         >
           {/* 左侧提示标识 */}
           <div className="flex items-center gap-1.5 opacity-40 group-hover:opacity-90 transition-opacity pointer-events-none">
@@ -180,13 +225,13 @@ export const WindowMapOverlay: React.FC = () => {
             />
           </div>
 
-          {/* 右侧微弱提示 */}
+          {/* 右侧提示 */}
           <div className="flex items-center gap-1 opacity-30 group-hover:opacity-75 transition-opacity pointer-events-none text-[10px]">
             <GripHorizontal className="w-3.5 h-3.5" />
           </div>
         </div>
 
-        {/* 顶部标题与拖拽控制栏（按住空白位置亦可原生移动整个窗口） */}
+        {/* 顶部标题与视图模式导航栏 */}
         <div
           data-tauri-drag-region
           onMouseDown={handleHeaderMouseDown}
@@ -215,44 +260,64 @@ export const WindowMapOverlay: React.FC = () => {
               </span>
             </div>
 
-            {/* 多显示器切换 Tab（禁用父级拖拽传播） */}
-            {screens.length > 1 && (
-              <div
-                onMouseDown={(e) => e.stopPropagation()}
-                className={`flex items-center gap-1.5 ml-2 p-1 rounded-xl border pointer-events-auto ${
-                  isDarkMode
-                    ? "bg-neutral-950/70 border-white/10"
-                    : "bg-neutral-200/70 border-neutral-300"
+            {/* 核心视图切换 Tab 组：【概览模式】+ 各屏幕单屏切换 */}
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              className={`flex items-center gap-1 ml-3 p-1 rounded-xl border pointer-events-auto ${
+                isDarkMode
+                  ? "bg-neutral-950/70 border-white/10"
+                  : "bg-neutral-200/70 border-neutral-300"
+              }`}
+            >
+              {/* 概览模式 Tab */}
+              <button
+                onClick={() => setViewMode("overview")}
+                title="概览模式：查看与拖拽所有屏幕布局（快捷键 0）"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition cursor-pointer font-medium ${
+                  viewMode === "overview"
+                    ? "bg-sky-500 text-white font-bold shadow-md shadow-sky-500/30"
+                    : isDarkMode
+                    ? "text-neutral-400 hover:text-white hover:bg-white/10"
+                    : "text-neutral-600 hover:text-neutral-950 hover:bg-black/5"
                 }`}
               >
-                {screens.map((s, idx) => {
-                  const isActive = activeScreen?.id === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setSelectedScreenId(s.id)}
-                      title={`切换到屏幕 ${idx + 1}（快捷键 ${idx + 1}）`}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition cursor-pointer font-medium ${
-                        isActive
-                          ? "bg-sky-500 text-white font-bold shadow-md shadow-sky-500/30"
-                          : isDarkMode
-                          ? "text-neutral-400 hover:text-white hover:bg-white/10"
-                          : "text-neutral-600 hover:text-neutral-950 hover:bg-black/5"
-                      }`}
-                    >
-                      <Monitor className="w-3.5 h-3.5" />
-                      <span>
-                        屏幕 {idx + 1}
-                        {s.isMain ? " (主)" : ""}
-                      </span>
-                      <kbd className="text-[10px] opacity-60 font-mono">
-                        [{idx + 1}]
-                      </kbd>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>概览模式</span>
+                <kbd className="text-[10px] opacity-60 font-mono">[0]</kbd>
+              </button>
+
+              {/* 各屏幕快速单屏聚焦 Tab */}
+              {screens.map((s, idx) => {
+                const isActive =
+                  viewMode === "single" && activeScreen?.id === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => {
+                      setSelectedScreenId(s.id);
+                      setViewMode("single");
+                    }}
+                    title={`切换到屏幕 ${idx + 1}（快捷键 ${idx + 1}）`}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition cursor-pointer font-medium ${
+                      isActive
+                        ? "bg-sky-500 text-white font-bold shadow-md shadow-sky-500/30"
+                        : isDarkMode
+                        ? "text-neutral-400 hover:text-white hover:bg-white/10"
+                        : "text-neutral-600 hover:text-neutral-950 hover:bg-black/5"
+                    }`}
+                  >
+                    <Monitor className="w-3.5 h-3.5" />
+                    <span>
+                      屏幕 {idx + 1}
+                      {s.isMain ? " (主)" : ""}
+                    </span>
+                    <kbd className="text-[10px] opacity-60 font-mono">
+                      [{idx + 1}]
+                    </kbd>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div
@@ -260,7 +325,7 @@ export const WindowMapOverlay: React.FC = () => {
             className="flex items-center gap-2 pointer-events-auto"
           >
             {/* 台前调度应用快速切换折叠开关 */}
-            {stageWindows.length > 0 && (
+            {currentStageCount > 0 && (
               <button
                 onClick={() =>
                   updateSettings({
@@ -285,7 +350,11 @@ export const WindowMapOverlay: React.FC = () => {
                 ) : (
                   <EyeOff className="w-3.5 h-3.5" />
                 )}
-                <span>台前调度 ({stageWindows.length})</span>
+                <span>
+                  台前调度 (
+                  {viewMode === "overview" ? "全屏 " : ""}
+                  {currentStageCount})
+                </span>
               </button>
             )}
 
@@ -360,9 +429,24 @@ export const WindowMapOverlay: React.FC = () => {
           <PermissionGuide />
         </div>
 
-        {/* 核心工作区：左侧 BounceCards 同比例弹性卡片流 + 右侧 AnimatedList 风格台前调度栏 */}
+        {/* 核心工作区：概览模式画布 / 单屏 BounceCards + 右侧台前调度侧栏 */}
         <div className="flex-1 p-3 min-h-0 flex items-stretch gap-3 overflow-hidden">
-          {activeScreen ? (
+          {viewMode === "overview" ? (
+            /* 概览模式：所有屏幕的大卡片自由拖动布局，内嵌 CardSwap 小卡片 */
+            <OverviewCanvas
+              screens={screens}
+              allWindows={allWindows}
+              isDarkMode={isDarkMode}
+              showTitles={settings.showWindowTitles}
+              getWindowsForScreen={getWindowsForScreen}
+              onFocusScreen={(screenId) => {
+                setSelectedScreenId(screenId);
+                setViewMode("single");
+              }}
+              onActivateWindow={activateWindow}
+            />
+          ) : activeScreen ? (
+            /* 单屏模式：当前选中屏幕应用 BounceCards 弹性卡片流 */
             <div className="flex-1 min-w-0 flex items-center justify-center overflow-hidden relative rounded-xl border shadow-inner">
               {/* 背景空间点阵参考线 */}
               <div
@@ -373,7 +457,6 @@ export const WindowMapOverlay: React.FC = () => {
                 } [background-size:24px_24px]`}
               />
 
-              {/* 渲染 BounceCards 同比例规范化卡片组 */}
               {windows.length > 0 ? (
                 <WindowBounceDeck
                   windows={windows}
@@ -392,7 +475,7 @@ export const WindowMapOverlay: React.FC = () => {
                   <p className="text-xs text-neutral-500 mt-1">
                     {stageWindows.length > 0
                       ? "应用已收纳在右侧“台前调度”中，点击直接激活"
-                      : "点击顶部切换其他显示器"}
+                      : "点击顶部切换其他显示器或返回概览模式"}
                   </p>
                 </div>
               )}
@@ -404,10 +487,13 @@ export const WindowMapOverlay: React.FC = () => {
             </div>
           )}
 
-          {/* 右侧独立台前调度侧栏（采用 AnimatedList 动效流） */}
+          {/* 右侧台前调度侧栏：概览模式展示全屏分组，单屏模式展示当前屏 */}
           {showStageShelf && (
             <StageManagerShelf
-              windows={stageWindows}
+              windows={viewMode === "single" ? stageWindows : undefined}
+              screenGroups={
+                viewMode === "overview" ? allStageGroups : undefined
+              }
               isDarkMode={isDarkMode}
               onActivate={activateWindow}
             />
@@ -431,33 +517,9 @@ export const WindowMapOverlay: React.FC = () => {
                     : "bg-neutral-300 text-neutral-800"
                 }`}
               >
-                ↑↓←→
+                0
               </kbd>{" "}
-              卡片切换
-            </span>
-            <span className="whitespace-nowrap">
-              <kbd
-                className={`px-1.5 py-0.5 rounded ${
-                  isDarkMode
-                    ? "bg-white/10 text-neutral-200"
-                    : "bg-neutral-300 text-neutral-800"
-                }`}
-              >
-                Enter
-              </kbd>{" "}
-              激活置顶
-            </span>
-            <span className="whitespace-nowrap">
-              <kbd
-                className={`px-1.5 py-0.5 rounded ${
-                  isDarkMode
-                    ? "bg-white/10 text-neutral-200"
-                    : "bg-neutral-300 text-neutral-800"
-                }`}
-              >
-                Tab
-              </kbd>{" "}
-              循环焦点
+              概览模式
             </span>
             {screens.length > 1 && (
               <span className="whitespace-nowrap">
@@ -470,8 +532,36 @@ export const WindowMapOverlay: React.FC = () => {
                 >
                   1-9
                 </kbd>{" "}
-                切换屏幕
+                单屏聚焦
               </span>
+            )}
+            {viewMode === "single" && (
+              <>
+                <span className="whitespace-nowrap">
+                  <kbd
+                    className={`px-1.5 py-0.5 rounded ${
+                      isDarkMode
+                        ? "bg-white/10 text-neutral-200"
+                        : "bg-neutral-300 text-neutral-800"
+                    }`}
+                  >
+                    ↑↓←→
+                  </kbd>{" "}
+                  卡片切换
+                </span>
+                <span className="whitespace-nowrap">
+                  <kbd
+                    className={`px-1.5 py-0.5 rounded ${
+                      isDarkMode
+                        ? "bg-white/10 text-neutral-200"
+                        : "bg-neutral-300 text-neutral-800"
+                    }`}
+                  >
+                    Enter
+                  </kbd>{" "}
+                  激活置顶
+                </span>
+              </>
             )}
             <span className="whitespace-nowrap">
               <kbd
@@ -488,11 +578,20 @@ export const WindowMapOverlay: React.FC = () => {
           </div>
 
           <div className="whitespace-nowrap ml-2">
-            当前应用: {windows.length} 个
-            {stageWindows.length > 0 ? ` · 台前: ${stageWindows.length} 个` : ""}
-            {selectedIndex >= 0 && windows[selectedIndex]
-              ? ` · 当前: ${windows[selectedIndex].appName}`
-              : ""}
+            {viewMode === "overview" ? (
+              <span>
+                显示器: {screens.length} 台 · 活跃应用: {totalMainCount} 个
+                {totalStageCount > 0 ? ` · 全屏台前: ${totalStageCount} 个` : ""}
+              </span>
+            ) : (
+              <span>
+                当前屏应用: {windows.length} 个
+                {stageWindows.length > 0 ? ` · 台前: ${stageWindows.length} 个` : ""}
+                {selectedIndex >= 0 && windows[selectedIndex]
+                  ? ` · 当前: ${windows[selectedIndex].appName}`
+                  : ""}
+              </span>
+            )}
           </div>
         </div>
       </div>

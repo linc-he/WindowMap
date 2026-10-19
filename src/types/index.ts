@@ -43,3 +43,10 @@ export interface AppSettings {
   closeOnActivate: boolean;
 }
 
+export type ViewMode = "overview" | "single";
+
+export interface ScreenPosition {
+  x: number;
+  y: number;
+}
+
